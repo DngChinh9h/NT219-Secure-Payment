@@ -1,0 +1,38 @@
+"use strict";
+require("dotenv").config();
+const express = require("express");
+const app = express();
+const {
+  generalLimiter,
+  loginLimiter,
+  paymentLimiter,
+} = require("./gateway/rateLimiter");
+
+app.use((req, res, next) => {
+  if (req.originalUrl === "/api/payments/webhook") return next();
+  express.json()(req, res, next);
+});
+
+app.use("/api", generalLimiter);
+
+app.use("/api/auth/login", loginLimiter);
+
+app.use("/api/payments", paymentLimiter);
+
+app.use("/api/auth", require("./auth/authRoutes"));
+app.use("/api/orders", require("./orders/orderRoutes"));
+app.use("/api/payments", require("./payments/paymentRoutes"));
+
+app.get("/health", (req, res) => res.json({ status: "ok", time: new Date() }));
+
+app.use((req, res) => res.status(404).json({ error: "Route not found" }));
+
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: "Internal server error" });
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+module.exports = app;
