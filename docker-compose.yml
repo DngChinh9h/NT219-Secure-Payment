@@ -24,7 +24,7 @@ services:
     build: .
     container_name: payment-app
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
       - NODE_ENV=development
       - DATABASE_URL=postgresql://postgres:password@db:5432/payment_db
