@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>TV3 Stripe Payment Demo</title>
+  <script src="https://js.stripe.com/v3/"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      padding: 30px;
+    }
+
+    .container {
+      max-width: 500px;
+      margin: auto;
+      background: white;
+      padding: 24px;
+      border-radius: 8px;
+    }
+
+    h2 {
+      margin-bottom: 16px;
+    }
+
+    input,
+    button {
+      width: 100%;
+      padding: 12px;
+      margin: 8px 0;
+      font-size: 15px;
+    }
+
+    input {
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+
+    button {
+      background: #5469d4;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      background: #aaa;
+      cursor: not-allowed;
+    }
+
+    #card-element {
+      border: 1px solid #ccc;
+      padding: 12px;
+      border-radius: 5px;
+      margin: 12px 0;
+    }
+
+    .info {
+      color: #555;
+      font-size: 14px;
+    }
+
+    .error {
+      color: red;
+    }
+
+    .success {
+      color: green;
+      white-space: pre-line;
+    }
+
+    hr {
+      margin: 16px 0;
+      border: none;
+      border-top: 1px solid #eee;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h2>Demo thanh toán Stripe</h2>
+
+    <p class="info">Seed account: customer1@demo.com / Password123!</p>
+    <input type="email" id="login-email" placeholder="Email" value="customer1@demo.com">
+    <input type="password" id="login-password" placeholder="Password" value="Password123!">
+    <button id="loginBtn">Đăng nhập</button>
+    <div id="login-result" class="success"></div>
+    <div id="login-error" class="error"></div>
+    <hr>
+
+    <button id="orderBtn">Tạo đơn hàng (50,000 VND)</button>
+    <div id="order-result" class="success"></div>
+
+    <hr>
+
+    <p class="info">
+      Test card: 4242 4242 4242 4242 — 12/34 — 123
+    </p>
+
+    <label>Thông tin thẻ</label>
+    <div id="card-element"></div>
+
+    <div id="card-errors" class="error"></div>
+
+    <button id="payBtn">Thanh toán</button>
+
+    <h3>Kết quả</h3>
+    <div id="result" class="success"></div>
+  </div>
+
+  <script>
+    const stripe = Stripe("pk_test_51TY11p4Hh5zYokLrnBdAJUuS7o775v3OLrQ6w0Q45pKRZ5d9oHgKohypF0ynPjtIUBJnvGcaTXKDDIVW4Tfh5LSA00X5hOH31Q");
+
+    const elements = stripe.elements();
+    const card = elements.create("card");
+    card.mount("#card-element");
+
+    const payBtn = document.getElementById("payBtn");
+    const result = document.getElementById("result");
+    const cardErrors = document.getElementById("card-errors");
+
+    card.on("change", function (event) {
+      cardErrors.textContent = event.error ? event.error.message : "";
+    });
+
+    let jwtToken = null;
+    let currentOrderId = null;
+
+    document.getElementById("loginBtn").addEventListener("click", async function () {
+      const email = document.getElementById("login-email").value;
+      const password = document.getElementById("login-password").value;
+      document.getElementById("login-error").textContent = "";
+      document.getElementById("login-result").textContent = "";
+
+      try {
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.error || "Login failed");
+
+        jwtToken = data.token;
+        document.getElementById("login-result").textContent = "✅ Đăng nhập thành công";
+      } catch (err) {
+        document.getElementById("login-error").textContent = "❌ " + err.message;
+      }
+    });
+
+    document.getElementById("orderBtn").addEventListener("click", async function () {
+      if (!jwtToken) { alert("Vui lòng đăng nhập trước"); return; }
+      document.getElementById("order-result").textContent = "";
+
+      try {
+        const res = await fetch("/api/orders", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + jwtToken
+          },
+          body: JSON.stringify({
+            items: [
+              {
+                productId: "550e8400-e29b-41d4-a716-446655440001",
+                productName: "Sản phẩm demo", quantity: 1, unitPrice: 50000
+              }
+            ],
+            shippingAddress: "123 Lê Lợi, Q1, TP.HCM",
+            totalAmount: 50000
+          })
+        });
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.error || "Failed to create order");
+
+        currentOrderId = data.order.id;
+        document.getElementById("order-result").textContent = "✅ Đơn hàng: " + currentOrderId;
+      } catch (err) {
+        document.getElementById("order-result").textContent = "❌ " + err.message;
+      }
+    });
+
+    payBtn.addEventListener("click", async function () {
+      if (!jwtToken) { alert("Vui lòng đăng nhập trước"); return; }
+      if (!currentOrderId) { alert("Vui lòng tạo đơn hàng trước"); return; }
+
+      payBtn.disabled = true;
+      payBtn.textContent = "Đang xử lý...";
+      result.textContent = "";
+      cardErrors.textContent = "";
+
+      try {
+        const { paymentMethod, error } = await stripe.createPaymentMethod({
+          type: "card",
+          card: card
+        });
+
+        if (error) {
+          throw new Error(error.message);
+        }
+
+        const res = await fetch("/api/payments/create-intent", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + jwtToken
+          },
+          body: JSON.stringify({
+            orderId: currentOrderId,
+            stripeToken: paymentMethod.id,
+            amount: 50000,
+            nonce: crypto.randomUUID(),
+            timestamp: Date.now()
+          })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || "Payment failed");
+        }
+
+        result.textContent =
+          "Tạo token thành công: " + paymentMethod.id +
+          "\nPaymentIntent: " + data.paymentIntentId +
+          "\nStatus: " + data.status;
+      } catch (err) {
+        cardErrors.textContent = err.message;
+      } finally {
+        payBtn.disabled = false;
+        payBtn.textContent = "Thanh toán";
+      }
+    });
+  </script>
+</body>
+
+</html>

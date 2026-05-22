@@ -1,6 +1,7 @@
 "use strict";
 require("dotenv").config();
 const express = require("express");
+const path = require("path");
 const app = express();
 const {
   generalLimiter,
@@ -8,20 +9,27 @@ const {
   paymentLimiter,
 } = require("./gateway/rateLimiter");
 
+app.post(
+  "/api/payments/webhook",
+  express.raw({ type: "application/json" }),
+  require("./payments/webhookHandler").handleWebhook
+);
+
 app.use((req, res, next) => {
   if (req.originalUrl === "/api/payments/webhook") return next();
   express.json()(req, res, next);
 });
 
 app.use("/api", generalLimiter);
-
 app.use("/api/auth/login", loginLimiter);
-
 app.use("/api/payments", paymentLimiter);
+
+app.use("/frontend", express.static(path.join(__dirname, "frontend")));
 
 app.use("/api/auth", require("./auth/authRoutes"));
 app.use("/api/orders", require("./orders/orderRoutes"));
 app.use("/api/payments", require("./payments/paymentRoutes"));
+app.use("/api/transactions", require("./transactions/transactionRoutes"));
 
 app.get("/health", (req, res) => res.json({ status: "ok", time: new Date() }));
 

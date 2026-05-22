@@ -1,0 +1,352 @@
+{
+  "info": {
+    "name": "NT219 Secure Payment System",
+    "description": "Postman collection cho hệ thống thanh toán TMĐT an toàn — NT219",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:3000" },
+    { "key": "jwt_token", "value": "" },
+    { "key": "user_id", "value": "" },
+    { "key": "order_id", "value": "" },
+    { "key": "other_user_jwt", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Happy Path",
+      "item": [
+        {
+          "name": "1.1 Register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\": \"testuser@demo.com\", \"password\": \"Password123!\"}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                "const data = pm.response.json();",
+                "if (data.token) {",
+                "  pm.collectionVariables.set('jwt_token', data.token);",
+                "  pm.collectionVariables.set('user_id', data.user.id);",
+                "}"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "1.2 Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\": \"customer1@demo.com\", \"password\": \"Password123!\"}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                "const data = pm.response.json();",
+                "if (data.token) {",
+                "  pm.collectionVariables.set('jwt_token', data.token);",
+                "  pm.collectionVariables.set('user_id', data.user.id);",
+                "  console.log('JWT saved:', data.token.substring(0, 30) + '...');",
+                "}"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "1.3 Create Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+            ],
+            "url": "{{base_url}}/api/orders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"items\": [{\"productId\": \"550e8400-e29b-41d4-a716-446655440001\", \"productName\": \"Sản phẩm demo\", \"quantity\": 1, \"unitPrice\": 50000}], \"shippingAddress\": \"123 Lê Lợi, Q1, TP.HCM\", \"totalAmount\": 50000}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                "const data = pm.response.json();",
+                "if (data.order?.id) {",
+                "  pm.collectionVariables.set('order_id', data.order.id);",
+                "}"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "1.4 Create PaymentIntent",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+            ],
+            "url": "{{base_url}}/api/payments/create-intent",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"orderId\": \"{{order_id}}\", \"stripeToken\": \"pm_card_visa\", \"amount\": 50000, \"nonce\": \"{{$randomUUID}}\", \"timestamp\": {{$timestamp}}}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                "pm.test('Has paymentIntentId', () => {",
+                "  const data = pm.response.json();",
+                "  pm.expect(data.paymentIntentId).to.exist;",
+                "});"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "1.5 Get My Transactions",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+            ],
+            "url": "{{base_url}}/api/transactions/mine"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                "pm.test('Has transactions array', () => {",
+                "  pm.expect(pm.response.json().transactions).to.be.an('array');",
+                "});"
+              ]
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "2. Security Attack Cases",
+      "item": [
+        {
+          "name": "2.1 No JWT → 401",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/orders/mine"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Attack blocked: 401', () => pm.response.to.have.status(401));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "2.2 alg:none JWT → 401",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer eyJhbGciOiJub25lIn0.eyJ1c2VySWQiOiJhZG1pbiJ9." }
+            ],
+            "url": "{{base_url}}/api/orders/mine"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Attack blocked: 401', () => pm.response.to.have.status(401));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "2.3 SQL Injection → 400",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\": \"' OR '1'='1' --\", \"password\": \"any\"}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('SQL Injection blocked', () => {",
+                "  pm.expect([400, 401]).to.include(pm.response.code);",
+                "});"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "2.4 Rate Limit → 429",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\": \"rate@test.com\", \"password\": \"wrong\"}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "// Chạy request này 6+ lần liên tiếp",
+                "pm.test('Rate limited', () => {",
+                "  const expected = [400, 401, 429];",
+                "  pm.expect(expected).to.include(pm.response.code);",
+                "});"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "2.5 Fake Webhook (no signature) → 400",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/payments/webhook",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"type\": \"payment_intent.succeeded\", \"data\": {\"object\": {\"id\": \"pi_fake\"}}}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Fake webhook blocked: 400', () => pm.response.to.have.status(400));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "2.6 Replay Nonce → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+            ],
+            "url": "{{base_url}}/api/payments/create-intent",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"orderId\": \"{{order_id}}\", \"stripeToken\": \"pm_card_visa\", \"amount\": 50000, \"nonce\": \"fixed-nonce-replay-test\", \"timestamp\": {{$timestamp}}}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "// Chạy 2 lần liên tiếp — lần 2 phải bị chặn",
+                "pm.test('Replay attack handled', () => {",
+                "  const expected = [400, 200];",
+                "  pm.expect(expected).to.include(pm.response.code);",
+                "});"
+              ]
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "3. Edge Cases",
+      "item": [
+        {
+          "name": "3.1 Negative amount → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+            ],
+            "url": "{{base_url}}/api/orders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"items\": [{\"productId\": \"550e8400-e29b-41d4-a716-446655440001\", \"productName\": \"Test\", \"quantity\": 1, \"unitPrice\": 50000}], \"shippingAddress\": \"Test\", \"totalAmount\": -100}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Negative amount rejected: 400', () => pm.response.to.have.status(400));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "3.2 Invalid UUID → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+            ],
+            "url": "{{base_url}}/api/orders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"items\": [{\"productId\": \"not-a-uuid\", \"productName\": \"Test\", \"quantity\": 1, \"unitPrice\": 50000}], \"shippingAddress\": \"Test\", \"totalAmount\": 50000}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Invalid UUID rejected: 400', () => pm.response.to.have.status(400));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "3.3 Empty items → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+            ],
+            "url": "{{base_url}}/api/orders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"items\": [], \"shippingAddress\": \"Test\", \"totalAmount\": 50000}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Empty items rejected: 400', () => pm.response.to.have.status(400));"
+              ]
+            }
+          }]
+        }
+      ]
+    }
+  ]
+}
