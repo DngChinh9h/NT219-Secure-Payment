@@ -20,5 +20,4 @@
     
       // Input Validation
       ...require('./inputValidator'), // validate, registerSchema, loginSchema, orderSchema, paymentSchema
-      ...require('./receiptService'),
     };
