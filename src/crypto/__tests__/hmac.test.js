@@ -5,7 +5,7 @@ describe('HMAC Helper', () => {
   test('sign tạo ra hex string', () => {
     const sig = hmacSign({ amount: 100 });
     expect(typeof sig).toBe('string');
-    expect(sig.length).toBe(64);
+    expect(sig.length).toBe(64); // SHA256 = 32 bytes = 64 hex chars
     expect(sig).toMatch(/^[a-f0-9]+$/);
   });
 

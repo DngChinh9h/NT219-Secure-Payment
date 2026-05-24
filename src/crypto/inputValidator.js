@@ -1,6 +1,7 @@
 "use strict";
 const { z } = require("zod");
 
+// Schema đăng ký tài khoản
 const registerSchema = z.object({
   email: z.string().email("Invalid email format").max(255),
   password: z
@@ -10,17 +11,19 @@ const registerSchema = z.object({
     .regex(/[A-Z]/, "Password must contain uppercase")
     .regex(/[0-9]/, "Password must contain number"),
 
-  // !!! THÊM 3 DÒNG NÀY VÀO ĐÂY !!!
+  // PII fields - Phục vụ mã hóa thông tin người dùng (TV2 xử lý)
   fullName: z.string().min(1, "Full name is required").max(255),
   address: z.string().min(5, "Address too short").max(500),
   cccdNumber: z.string().min(9, "Identity number too short").max(20),
 });
 
+// Schema đăng nhập
 const loginSchema = z.object({
   email: z.string().email().max(255),
   password: z.string().min(1).max(128),
 });
 
+// Schema tạo đơn hàng
 const orderSchema = z.object({
   items: z
     .array(
@@ -38,6 +41,7 @@ const orderSchema = z.object({
   totalAmount: z.number().int().positive(),
 });
 
+// Schema tạo payment intent
 const paymentSchema = z.object({
   orderId: z.string().uuid("orderId must be UUID"),
   stripeToken: z
@@ -46,6 +50,15 @@ const paymentSchema = z.object({
   amount: z.number().int().positive().max(100_000_000),
 });
 
+/**
+ * Express middleware factory — validate request.body theo schema
+ *
+ * Cách dùng trong route:
+ *   router.post('/login', validate(loginSchema), authController.login)
+ *
+ * Nếu validation fail → trả 400 ngay, không vào controller
+ * Nếu pass → req.body được thay bằng data đã sanitize
+ */
 function validate(schema) {
   return (req, res, next) => {
     const result = schema.safeParse(req.body);
@@ -55,7 +68,7 @@ function validate(schema) {
         details: result.error.flatten().fieldErrors,
       });
     }
-    req.body = result.data;
+    req.body = result.data; // data đã sanitize, type-safe
     next();
   };
 }
