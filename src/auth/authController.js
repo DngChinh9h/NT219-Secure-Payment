@@ -1,17 +1,26 @@
 "use strict";
 const userService = require("../users/userService");
-const { signJWT } = require("../crypto");
+const { signJWT } = require("../crypto/jwtHelper");
 
 async function register(req, res) {
   try {
-    const { email, password } = req.body;
+    // SỬA DÒNG NÀY: Bóc tách thêm các trường thông tin cá nhân từ req.body
+    const { email, password, fullName, address, cccdNumber } = req.body;
 
     const existing = await userService.findByEmail(email);
     if (existing) {
       return res.status(409).json({ error: "Email already exists" });
     }
 
-    const user = await userService.createUser({ email, password });
+    // SỬA DÒNG NÀY: Truyền đầy đủ các thông tin cá nhân vào hàm createUser
+    const user = await userService.createUser({
+      email,
+      password,
+      fullName,
+      address,
+      cccdNumber,
+    });
+
     const token = signJWT({
       userId: user.id,
       email: user.email,
