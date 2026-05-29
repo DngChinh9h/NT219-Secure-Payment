@@ -24,7 +24,13 @@ app.use("/api", generalLimiter);
 app.use("/api/auth/login", loginLimiter);
 app.use("/api/payments", paymentLimiter);
 
-app.use("/frontend", express.static(path.join(__dirname, "frontend")));
+const frontendDir = path.join(__dirname, "frontend");
+
+app.get(["/", "/frontend", "/frontend/"], (req, res) => {
+  res.sendFile(path.join(frontendDir, "index.html"));
+});
+
+app.use("/frontend", express.static(frontendDir));
 
 app.use("/api/auth", require("./auth/authRoutes"));
 app.use("/api/orders", require("./orders/orderRoutes"));
