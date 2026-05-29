@@ -91,16 +91,22 @@ async function createPaymentIntent({ orderId, stripeToken, amount, userId }) {
      * Server tuyệt đối không nhận card number.
      */
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: Number(order.total_amount),
-      currency: 'vnd',
-      payment_method: stripeToken,
-      confirmation_method: 'manual',
-      confirm: true,
-      metadata: {
-        orderId: order.id,
-        userId: order.user_id,
-      },
-    });
+  amount: Number(order.total_amount),
+  currency: 'vnd',
+  payment_method: stripeToken,
+  confirmation_method: 'manual',
+  confirm: true,
+
+  automatic_payment_methods: {
+    enabled: true,
+    allow_redirects: 'never',
+  },
+
+  metadata: {
+    orderId: order.id,
+    userId: order.user_id,
+  },
+});
 
     /**
      * Order đã là processing từ bước atomic lock.
