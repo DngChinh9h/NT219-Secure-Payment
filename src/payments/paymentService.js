@@ -94,20 +94,14 @@ async function createPaymentIntent({ orderId, stripeToken, amount, userId }) {
   amount: Number(order.total_amount),
   currency: 'vnd',
   payment_method: stripeToken,
+  payment_method_types: ['card'],
   confirmation_method: 'manual',
   confirm: true,
-
-  automatic_payment_methods: {
-    enabled: true,
-    allow_redirects: 'never',
-  },
-
   metadata: {
     orderId: order.id,
     userId: order.user_id,
   },
 });
-
     /**
      * Order đã là processing từ bước atomic lock.
      * Ở đây chỉ gắn Stripe PaymentIntent ID.
