@@ -4,12 +4,21 @@
     const path = require('path');
     
     // Đọc key từ file lúc khởi động — fail fast nếu file không tồn tại
+    // Deploy global: set JWT_PRIVATE_KEY_PATH và JWT_PUBLIC_KEY_PATH trong .env
     let PRIVATE_KEY, PUBLIC_KEY;
     try {
-      PRIVATE_KEY = fs.readFileSync(path.join(__dirname, '../../keys/private.pem'));
-      PUBLIC_KEY  = fs.readFileSync(path.join(__dirname, '../../keys/public.pem'));
+      const privatePath =
+        process.env.JWT_PRIVATE_KEY_PATH ||
+        path.join(__dirname, '../../keys/private.pem');
+
+      const publicPath =
+        process.env.JWT_PUBLIC_KEY_PATH ||
+        path.join(__dirname, '../../keys/public.pem');
+
+      PRIVATE_KEY = fs.readFileSync(privatePath);
+      PUBLIC_KEY  = fs.readFileSync(publicPath);
     } catch (err) {
-      console.error('❌ RSA keys not found. Run: openssl genrsa -out keys/private.pem 2048');
+      console.error('RSA keys not found:', err.message);
       if (process.env.NODE_ENV === 'production') process.exit(1);
     }
     

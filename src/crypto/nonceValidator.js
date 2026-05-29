@@ -1,43 +1,88 @@
 'use strict';
-    
-    const WINDOW_MS  = 5 * 60 * 1000; // 5 phút
-    const usedNonces = new Set();      // In-memory — production dùng Redis
-    
-    /**
-     * Validate nonce + timestamp của request thanh toán
-     * Gọi trong Payment Service trước khi xử lý
-     *
-     * @param {string} nonce     — UUID random từ client, dùng 1 lần duy nhất
-     * @param {number} timestamp — Date.now() từ client (milliseconds)
-     * @returns {{ valid: boolean, reason?: string }}
-     */
-    function validateNonce(nonce, timestamp) {
-      // 1. Kiểm tra tồn tại
-      if (!nonce || !timestamp) {
-        return { valid: false, reason: 'Missing nonce or timestamp' };
-      }
-    
-      // 2. Kiểm tra timestamp — request không quá 5 phút
-      const drift = Math.abs(Date.now() - Number(timestamp));
-      if (drift > WINDOW_MS) {
-        return { valid: false, reason: `Request expired: drift ${drift}ms > ${WINDOW_MS}ms` };
-      }
-    
-      // 3. Kiểm tra nonce chưa được dùng
-      if (usedNonces.has(nonce)) {
-        return { valid: false, reason: 'Replay attack detected: nonce already used' };
-      }
-    
-      // 4. Ghi nhận nonce đã dùng
-      usedNonces.add(nonce);
-    
-      // 5. Tự dọn sau 5 phút để tránh memory leak
-      setTimeout(() => usedNonces.delete(nonce), WINDOW_MS + 1000);
-    
-      return { valid: true };
-    }
-    
-    // Chỉ dùng cho testing — reset Set
-    function _clearNonces() { usedNonces.clear(); }
-    
-    module.exports = { validateNonce, _clearNonces };
+
+const WINDOW_MS = 5 * 60 * 1000; // 5 phút
+const usedNonces = new Set();
+const nonceTimers = new Map();
+
+/**
+ * Validate nonce + timestamp để chống replay attack.
+ *
+ * @param {string} nonce - UUID random từ client, chỉ dùng một lần
+ * @param {number|string} timestamp - Date.now() từ client
+ * @returns {{ valid: boolean, reason?: string }}
+ */
+function validateNonce(nonce, timestamp) {
+  if (!nonce || !timestamp) {
+    return {
+      valid: false,
+      reason: 'Missing nonce or timestamp',
+    };
+  }
+
+  const ts = Number(timestamp);
+
+  if (!Number.isFinite(ts)) {
+    return {
+      valid: false,
+      reason: 'Invalid timestamp',
+    };
+  }
+
+  const now = Date.now();
+
+  if (Math.abs(now - ts) > WINDOW_MS) {
+    return {
+      valid: false,
+      reason: 'Request expired or timestamp is too far from server time',
+    };
+  }
+
+  if (usedNonces.has(nonce)) {
+    return {
+      valid: false,
+      reason: 'Replay attack detected: nonce already used',
+    };
+  }
+
+  usedNonces.add(nonce);
+
+  /**
+   * Tự xóa nonce sau cửa sổ 5 phút.
+   *
+   * Quan trọng:
+   * - .unref() để timer này không giữ Node/Jest sống.
+   * - Lưu timer vào Map để test có thể clear sạch bằng _clearNonces().
+   */
+  const timer = setTimeout(() => {
+    usedNonces.delete(nonce);
+    nonceTimers.delete(nonce);
+  }, WINDOW_MS + 1000);
+
+  if (typeof timer.unref === 'function') {
+    timer.unref();
+  }
+
+  nonceTimers.set(nonce, timer);
+
+  return {
+    valid: true,
+  };
+}
+
+/**
+ * Chỉ dùng cho test.
+ * Xóa toàn bộ nonce và clear toàn bộ timer để Jest không bị open handle.
+ */
+function _clearNonces() {
+  for (const timer of nonceTimers.values()) {
+    clearTimeout(timer);
+  }
+
+  nonceTimers.clear();
+  usedNonces.clear();
+}
+
+module.exports = {
+  validateNonce,
+  _clearNonces,
+};

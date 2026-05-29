@@ -21,8 +21,11 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "test": "jest --watchAll",
-    "test:ci": "jest --coverage"
+    "test": "jest --runInBand",
+    "test:ci": "jest --coverage",
+    "migrate:deploy": "node src/db/migrateDeploy.js",
+    "start:prod": "node src/db/migrateDeploy.js && node src/db/seed.js && node src/index.js",
+    "smoke": "node scripts/smoke-check.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

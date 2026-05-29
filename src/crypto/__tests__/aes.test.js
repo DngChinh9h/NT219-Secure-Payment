@@ -25,7 +25,11 @@ const crypto = require('crypto');
     
       test('ciphertext bị sửa → throw Error', () => {
         const enc = aesEncrypt('important data', testKey);
-        const tampered = { ...enc, ciphertext: enc.ciphertext.replace('a', 'b') };
+        const firstChar = enc.ciphertext[0] === '0' ? '1' : '0';
+        const tampered = {
+          ...enc,
+          ciphertext: firstChar + enc.ciphertext.slice(1)
+        };
         expect(() => aesDecrypt(tampered, testKey)).toThrow();
       });
     

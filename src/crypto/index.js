@@ -20,4 +20,7 @@
     
       // Input Validation
       ...require('./inputValidator'), // validate, registerSchema, loginSchema, orderSchema, paymentSchema
+    
+      // Receipt JWS
+      ...require('./receiptService'), // createSignedReceipt, verifyReceipt
     };

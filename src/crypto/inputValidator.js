@@ -48,6 +48,10 @@ const paymentSchema = z.object({
     .string()
     .startsWith("pm_", "Must be Stripe PaymentMethod token"),
   amount: z.number().int().positive().max(100_000_000),
+
+  // Anti-replay fields — required by paymentController
+  nonce: z.string().uuid("nonce must be UUID"),
+  timestamp: z.coerce.number().int().positive(),
 });
 
 /**
