@@ -1,5 +1,6 @@
 'use strict';
 const db = require('../db');
+const { verifyReceipt: verifySignedReceipt } = require('../crypto');
 
 async function getMyTransactions(req, res) {
   try {
@@ -53,4 +54,30 @@ async function getReceipt(req, res) {
   }
 }
 
-module.exports = { getMyTransactions, getAuditLogs, getReceipt };
+async function verifyReceipt(req, res) {
+  try {
+    const { receipt } = req.body || {};
+
+    if (!receipt || typeof receipt !== "string") {
+      return res.status(400).json({
+        valid: false,
+        error: "Invalid receipt",
+      });
+    }
+
+    const payload = verifySignedReceipt(receipt);
+    return res.status(200).json({ valid: true, payload });
+  } catch (err) {
+    return res.status(200).json({
+      valid: false,
+      error: "Invalid receipt",
+    });
+  }
+}
+
+module.exports = {
+  getMyTransactions,
+  getAuditLogs,
+  getReceipt,
+  verifyReceipt,
+};

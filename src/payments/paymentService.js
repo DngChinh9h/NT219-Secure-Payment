@@ -216,6 +216,8 @@ async function createSuccessfulTransaction({
       (order_id, user_id, stripe_payment_id, provider, provider_payment_id,
        amount, currency, status, stripe_token_last4)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     ON CONFLICT (stripe_payment_id) WHERE stripe_payment_id IS NOT NULL
+     DO UPDATE SET stripe_payment_id = EXCLUDED.stripe_payment_id
      RETURNING *`,
     [
       order.id,
@@ -238,10 +240,17 @@ async function createSuccessfulTransaction({
   });
 }
 
-/**
- * Handle Stripe payment_intent.succeeded webhook.
- */
-async function confirmPayment(paymentIntentId, last4 = null) {
+function getProviderNameForOrder(order, paymentIntentId) {
+  return order.payment_provider || (paymentIntentId.startsWith("mock_pi_") ? "mock_bank" : "stripe");
+}
+
+function getMockProviderStatusFromOrder(order, providerStatus) {
+  if (order.status === "paid") return "succeeded";
+  if (order.status === "payment_failed") return "failed";
+  return providerStatus;
+}
+
+async function getOrderForPayment(paymentIntentId) {
   const orderResult = await db.query(
     `SELECT *
      FROM orders
@@ -250,7 +259,14 @@ async function confirmPayment(paymentIntentId, last4 = null) {
     [paymentIntentId],
   );
 
-  const order = orderResult.rows[0];
+  return orderResult.rows[0] || null;
+}
+
+/**
+ * Handle Stripe payment_intent.succeeded webhook.
+ */
+async function confirmPayment(paymentIntentId, last4 = null) {
+  const order = await getOrderForPayment(paymentIntentId);
 
   if (!order) {
     const err = new Error(`No order for paymentIntent: ${paymentIntentId}`);
@@ -286,13 +302,54 @@ async function confirmPayment(paymentIntentId, last4 = null) {
 
   return createSuccessfulTransaction({
     order,
-    provider: "stripe",
+    provider: getProviderNameForOrder(order, paymentIntentId),
     providerPaymentId: paymentIntentId,
     last4,
   });
 }
 
+async function syncPayment({ paymentIntentId, userId, role }) {
+  const order = await getOrderForPayment(paymentIntentId);
+
+  if (!order) {
+    const err = new Error("Order not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (role !== "admin" && order.user_id !== userId) {
+    const err = new Error("Forbidden: order belongs to another user");
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const providerName = getProviderNameForOrder(order, paymentIntentId);
+  const providerModule = getProvider(providerName);
+  const providerPayment = await providerModule.retrievePayment(paymentIntentId);
+  const providerStatus =
+    providerName === "mock_bank"
+      ? getMockProviderStatusFromOrder(order, providerPayment.status)
+      : providerPayment.status;
+
+  let transaction = null;
+  let orderStatus = order.status;
+
+  if (providerStatus === "succeeded") {
+    transaction = await confirmPayment(paymentIntentId);
+    orderStatus = "paid";
+  }
+
+  return {
+    paymentIntentId,
+    provider: providerName,
+    providerStatus,
+    orderStatus,
+    transaction,
+  };
+}
+
 module.exports = {
   createPaymentIntent,
   confirmPayment,
+  syncPayment,
 };

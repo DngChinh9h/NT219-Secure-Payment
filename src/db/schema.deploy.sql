@@ -1,5 +1,6 @@
 -- Deploy-safe migration — không mất data
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE TABLE IF NOT EXISTS users (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -73,6 +74,20 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS webhook_events (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  provider VARCHAR(50) NOT NULL DEFAULT 'stripe',
+  provider_event_id VARCHAR(255) NOT NULL,
+  event_type VARCHAR(255) NOT NULL,
+  provider_payment_id VARCHAR(255),
+  processing_status VARCHAR(50) NOT NULL DEFAULT 'received',
+  raw_payload JSONB,
+  error_message TEXT,
+  received_at TIMESTAMP DEFAULT NOW(),
+  processed_at TIMESTAMP,
+  UNIQUE(provider, provider_event_id)
+);
+
 -- Upgrade columns for existing tables
 ALTER TABLE users ADD COLUMN IF NOT EXISTS key_version INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS encrypted_name TEXT;
@@ -96,6 +111,13 @@ CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_orders_status  ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_transactions_order_id ON transactions(order_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_provider_payment_id ON transactions(provider_payment_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_stripe_payment_id_unique
+ON transactions(stripe_payment_id)
+WHERE stripe_payment_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_webhook_events_provider_payment_id
+ON webhook_events(provider_payment_id);
+CREATE INDEX IF NOT EXISTS idx_webhook_events_status
+ON webhook_events(processing_status);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id    ON audit_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_event_type ON audit_logs(event_type);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);

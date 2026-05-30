@@ -77,4 +77,19 @@ async function createPaymentIntent(req, res) {
   }
 }
 
-module.exports = { createPaymentIntent };
+async function syncPayment(req, res) {
+  try {
+    const result = await paymentService.syncPayment({
+      paymentIntentId: req.params.paymentIntentId,
+      userId: req.user.userId,
+      role: req.user.role
+    });
+
+    return res.status(200).json(result);
+  } catch (err) {
+    const status = err.statusCode || 400;
+    return res.status(status).json({ error: err.message });
+  }
+}
+
+module.exports = { createPaymentIntent, syncPayment };

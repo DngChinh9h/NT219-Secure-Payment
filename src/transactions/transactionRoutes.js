@@ -5,6 +5,8 @@ const { authenticate }  = require('../gateway/authMiddleware');
 const { requireRole }   = require('../gateway/authzMiddleware');
 const ctrl = require('./transactionController');
 
+router.post('/receipt/verify', ctrl.verifyReceipt);
+
 router.use(authenticate);
 
 router.get('/mine',       ctrl.getMyTransactions);

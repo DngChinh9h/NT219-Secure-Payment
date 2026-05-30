@@ -12,12 +12,179 @@ jest.mock("../../db", () => ({
 
 // Mock Stripe — paymentService.js does: const Stripe = require('stripe'); const stripe = Stripe(key);
 const mockPaymentIntentsCreate = jest.fn();
+const mockPaymentIntentsRetrieve = jest.fn();
 jest.mock("stripe", () => {
   // Return a constructor function that returns the stripe instance
   return jest.fn().mockReturnValue({
     paymentIntents: {
       create: mockPaymentIntentsCreate,
+      retrieve: mockPaymentIntentsRetrieve,
     },
+  });
+});
+
+describe("paymentService sync and idempotency", () => {
+  const orderId = "550e8400-e29b-41d4-a716-446655440000";
+  const userId = "660e8400-e29b-41d4-a716-446655440000";
+  const paymentIntentId = "pi_sync_succeeded";
+  const order = {
+    id: orderId,
+    user_id: userId,
+    total_amount: 50000,
+    status: "processing",
+    payment_provider: "stripe",
+    stripe_payment_intent_id: paymentIntentId,
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test("syncPayment confirms succeeded provider status and returns transaction", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rowCount: 1, rows: [order] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [order] })
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [
+          {
+            id: "tx_sync",
+            order_id: orderId,
+            user_id: userId,
+            amount: 50000,
+            status: "success",
+            hmac_signature: null,
+            jws_receipt: null,
+            created_at: "2026-05-30T00:00:01.000Z",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rowCount: 1 })
+      .mockResolvedValueOnce({ rowCount: 1 });
+
+    mockPaymentIntentsRetrieve.mockResolvedValueOnce({
+      id: paymentIntentId,
+      status: "succeeded",
+      client_secret: "pi_sync_secret",
+    });
+
+    const result = await syncPayment({
+      paymentIntentId,
+      userId,
+      role: "customer",
+    });
+
+    expect(result).toMatchObject({
+      paymentIntentId,
+      provider: "stripe",
+      providerStatus: "succeeded",
+      orderStatus: "paid",
+    });
+    expect(result.transaction.id).toBe("tx_sync");
+    expect(orderService.updateOrderStatus).toHaveBeenCalledWith(
+      orderId,
+      "paid",
+      paymentIntentId,
+    );
+  });
+
+  test("syncPayment returns provider status without confirming unfinished payment", async () => {
+    mockQuery.mockResolvedValueOnce({ rowCount: 1, rows: [order] });
+    mockPaymentIntentsRetrieve.mockResolvedValueOnce({
+      id: paymentIntentId,
+      status: "processing",
+      client_secret: "pi_sync_secret",
+    });
+
+    const result = await syncPayment({
+      paymentIntentId,
+      userId,
+      role: "customer",
+    });
+
+    expect(result).toMatchObject({
+      paymentIntentId,
+      providerStatus: "processing",
+      orderStatus: "processing",
+      transaction: null,
+    });
+    expect(orderService.updateOrderStatus).not.toHaveBeenCalled();
+  });
+
+  test("syncPayment blocks non-owner non-admin users", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rowCount: 1,
+      rows: [{ ...order, user_id: "different-user-id" }],
+    });
+
+    await expect(
+      syncPayment({
+        paymentIntentId,
+        userId,
+        role: "customer",
+      }),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining("Forbidden"),
+      statusCode: 403,
+    });
+    expect(mockPaymentIntentsRetrieve).not.toHaveBeenCalled();
+  });
+
+  test("confirmPayment returns existing transaction without duplicate insert", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rowCount: 1, rows: [order] })
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [
+          {
+            id: "tx_existing",
+            order_id: orderId,
+            user_id: userId,
+            status: "success",
+            stripe_token_last4: "4242",
+            hmac_signature: "existing-hmac",
+            jws_receipt: "existing-jws",
+          },
+        ],
+      });
+
+    const tx = await confirmPayment(paymentIntentId, "4242");
+
+    expect(tx.id).toBe("tx_existing");
+    expect(
+      mockQuery.mock.calls.some((call) =>
+        call[0].includes("INSERT INTO transactions"),
+      ),
+    ).toBe(false);
+  });
+
+  test("new transaction insert uses ON CONFLICT for DB idempotency", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rowCount: 1, rows: [order] })
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [
+          {
+            id: "tx_new",
+            order_id: orderId,
+            user_id: userId,
+            amount: 50000,
+            status: "success",
+            hmac_signature: "existing-hmac",
+            jws_receipt: "existing-jws",
+            created_at: "2026-05-30T00:00:01.000Z",
+          },
+        ],
+      });
+
+    await confirmPayment(paymentIntentId, "4242");
+
+    const insertCall = mockQuery.mock.calls.find((call) =>
+      call[0].includes("INSERT INTO transactions"),
+    );
+    expect(insertCall[0]).toContain("ON CONFLICT (stripe_payment_id)");
   });
 });
 
@@ -34,7 +201,11 @@ jest.mock("../../crypto", () => ({
 }));
 
 const orderService = require("../../orders/orderService");
-const { createPaymentIntent } = require("../paymentService");
+const {
+  createPaymentIntent,
+  confirmPayment,
+  syncPayment,
+} = require("../paymentService");
 
 describe("paymentService — double-spend prevention", () => {
   const orderId = "550e8400-e29b-41d4-a716-446655440000";

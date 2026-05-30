@@ -4,6 +4,7 @@ const Stripe = require('stripe');
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 const db = require('../db');
 const paymentService = require('./paymentService');
+const webhookEventService = require('./webhookEventService');
 const orderService = require('../orders/orderService');
 const auditService   = require('../transactions/auditService');
 
@@ -35,11 +36,32 @@ async function handleWebhook(req, res) {
     payload:   { eventType: event.type, eventId: event.id }
   });
 
+  const paymentIntent = event.data?.object?.object === 'payment_intent'
+    ? event.data.object
+    : null;
+
+  let ledgerEvent;
+  try {
+    ledgerEvent = await webhookEventService.recordReceivedEvent({
+      provider: 'stripe',
+      providerEventId: event.id,
+      eventType: event.type,
+      providerPaymentId: paymentIntent?.id || null,
+      rawPayload: event
+    });
+  } catch (err) {
+    console.error('Webhook ledger record error:', err);
+    return res.status(500).json({ error: 'Webhook ledger failed' });
+  }
+
+  if (ledgerEvent?.processing_status === 'processed') {
+    return res.status(200).json({ received: true, duplicate: true });
+  }
+
   try {
     switch (event.type) {
 
       case 'payment_intent.succeeded': {
-        const paymentIntent = event.data.object;
         const last4 = paymentIntent.payment_method_details?.card?.last4 || null;
 
         const tx = await paymentService.confirmPayment(paymentIntent.id, last4);
@@ -52,7 +74,6 @@ async function handleWebhook(req, res) {
       }
 
       case 'payment_intent.payment_failed': {
-        const paymentIntent = event.data.object;
         const errorMsg = paymentIntent.last_payment_error?.message || 'Unknown error';
 
         const orderResult = await db.query(
@@ -82,9 +103,21 @@ async function handleWebhook(req, res) {
       default:
         break;
     }
+
+    await webhookEventService.markProcessed({
+      provider: 'stripe',
+      providerEventId: event.id
+    });
   } catch (err) {
     console.error('Webhook processing error:', err);
-    return res.status(500).json({ error: 'Webhook processing failed' });
+    await webhookEventService.markFailed({
+      provider: 'stripe',
+      providerEventId: event.id,
+      errorMessage: err.message
+    }).catch(() => {});
+
+    const status = err.statusCode || 500;
+    return res.status(status).json({ error: 'Webhook processing failed' });
   }
 
   return res.status(200).json({ received: true });
