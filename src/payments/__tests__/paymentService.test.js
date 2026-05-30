@@ -33,6 +33,7 @@ jest.mock("../../crypto", () => ({
   createSignedReceipt: jest.fn(() => "mock-jws-receipt"),
 }));
 
+const orderService = require("../../orders/orderService");
 const { createPaymentIntent } = require("../paymentService");
 
 describe("paymentService — double-spend prevention", () => {
@@ -126,6 +127,18 @@ describe("paymentService — double-spend prevention", () => {
     expect(result.paymentIntentId).toBe("pi_test_intent");
     expect(result.status).toBe("requires_capture");
     expect(mockPaymentIntentsCreate).toHaveBeenCalledTimes(1);
+    expect(mockPaymentIntentsCreate).toHaveBeenCalledWith({
+      amount: 50000,
+      currency: "vnd",
+      payment_method: "pm_test_123",
+      payment_method_types: ["card"],
+      confirmation_method: "manual",
+      confirm: true,
+      metadata: {
+        orderId,
+        userId,
+      },
+    });
   });
 
   test("Stripe call fails → rollback order to pending", async () => {
@@ -157,5 +170,151 @@ describe("paymentService — double-spend prevention", () => {
     const rollbackCall = mockQuery.mock.calls[1];
     expect(rollbackCall[0]).toContain("pending");
     expect(rollbackCall[0]).toContain("processing");
+  });
+});
+
+describe("paymentService — provider abstraction", () => {
+  const orderId = "550e8400-e29b-41d4-a716-446655440000";
+  const userId = "660e8400-e29b-41d4-a716-446655440000";
+  const order = {
+    id: orderId,
+    user_id: userId,
+    total_amount: 50000,
+    created_at: "2026-05-30T00:00:00.000Z",
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test("mock_bank + mock_success pays order and creates secured transaction", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rowCount: 1, rows: [order] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [order] })
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [
+          {
+            id: "tx_mock_success",
+            order_id: orderId,
+            user_id: userId,
+            amount: 50000,
+            status: "success",
+            hmac_signature: null,
+            jws_receipt: null,
+            created_at: "2026-05-30T00:00:01.000Z",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rowCount: 1 })
+      .mockResolvedValueOnce({ rowCount: 1 });
+
+    const result = await createPaymentIntent({
+      orderId,
+      provider: "mock_bank",
+      paymentToken: "mock_success",
+      amount: 50000,
+      userId,
+    });
+
+    expect(result).toMatchObject({
+      clientSecret: null,
+      provider: "mock_bank",
+      status: "succeeded",
+    });
+    expect(result.paymentIntentId).toMatch(/^mock_pi_/);
+    expect(orderService.updateOrderStatus).toHaveBeenCalledWith(
+      orderId,
+      "paid",
+      expect.stringMatching(/^mock_pi_/),
+    );
+    expect(mockQuery.mock.calls[2][0]).toContain("INSERT INTO transactions");
+    expect(mockQuery.mock.calls[2][0]).toContain("provider_payment_id");
+  });
+
+  test("mock_bank + mock_failed marks order payment_failed without success transaction", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rowCount: 1, rows: [order] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [order] });
+
+    const result = await createPaymentIntent({
+      orderId,
+      provider: "mock_bank",
+      paymentToken: "mock_failed",
+      amount: 50000,
+      userId,
+    });
+
+    expect(result).toMatchObject({
+      clientSecret: null,
+      provider: "mock_bank",
+      status: "failed",
+    });
+    expect(orderService.updateOrderStatus).toHaveBeenCalledWith(
+      orderId,
+      "payment_failed",
+      expect.stringMatching(/^mock_pi_/),
+    );
+    expect(mockQuery).toHaveBeenCalledTimes(2);
+  });
+
+  test("mock_bank + mock_pending leaves order processing without transaction", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rowCount: 1, rows: [order] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [order] });
+
+    const result = await createPaymentIntent({
+      orderId,
+      provider: "mock_bank",
+      paymentToken: "mock_pending",
+      amount: 50000,
+      userId,
+    });
+
+    expect(result).toMatchObject({
+      clientSecret: null,
+      provider: "mock_bank",
+      status: "processing",
+    });
+    expect(orderService.updateOrderStatus).not.toHaveBeenCalled();
+    expect(mockQuery).toHaveBeenCalledTimes(2);
+  });
+
+  test("stripe remains backward compatible with stripeToken", async () => {
+    mockQuery
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [order],
+      })
+      .mockResolvedValueOnce({ rowCount: 1 });
+
+    mockPaymentIntentsCreate.mockResolvedValueOnce({
+      id: "pi_backward_compatible",
+      client_secret: "pi_backward_secret",
+      status: "requires_confirmation",
+    });
+
+    const result = await createPaymentIntent({
+      orderId,
+      stripeToken: "pm_card_visa",
+      amount: 50000,
+      userId,
+    });
+
+    expect(result).toMatchObject({
+      clientSecret: "pi_backward_secret",
+      paymentIntentId: "pi_backward_compatible",
+      provider: "stripe",
+      providerPaymentId: "pi_backward_compatible",
+      status: "requires_confirmation",
+    });
+    expect(mockPaymentIntentsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payment_method: "pm_card_visa",
+        payment_method_types: ["card"],
+        confirmation_method: "manual",
+        confirm: true,
+      }),
+    );
   });
 });

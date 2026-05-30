@@ -1,6 +1,7 @@
 "use strict";
 const db = require("../db");
 const { hmacSign } = require("../crypto");
+const { assertTransition } = require("./orderStateMachine");
 
 /**
  * Tạo đơn hàng mới
@@ -92,12 +93,25 @@ async function updateOrderStatus(
   status,
   stripePaymentIntentId = null,
 ) {
+  const orderResult = await db.query(
+    "SELECT status, stripe_payment_intent_id FROM orders WHERE id = $1 LIMIT 1",
+    [orderId],
+  );
+
+  const currentOrder = orderResult.rows[0];
+  if (!currentOrder) return null;
+
+  assertTransition(currentOrder.status, status);
+
+  const nextStripePaymentIntentId =
+    stripePaymentIntentId || currentOrder.stripe_payment_intent_id || null;
+
   const result = await db.query(
     `UPDATE orders
          SET status = $1, stripe_payment_intent_id = $2, updated_at = NOW()
          WHERE id = $3
          RETURNING *`,
-    [status, stripePaymentIntentId, orderId],
+    [status, nextStripePaymentIntentId, orderId],
   );
   return result.rows[0];
 }

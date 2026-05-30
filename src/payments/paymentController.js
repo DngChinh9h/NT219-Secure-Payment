@@ -5,7 +5,15 @@ const { validateNonce } = require('../crypto');
 const { checkVelocity, recordFailure } = require('./velocityCheck');
 
 async function createPaymentIntent(req, res) {
-  const { orderId, stripeToken, amount, nonce, timestamp } = req.body;
+  const {
+    orderId,
+    provider,
+    paymentToken,
+    stripeToken,
+    amount,
+    nonce,
+    timestamp,
+  } = req.body;
 
   // 1. Nonce / anti-replay check
   const nonceCheck = validateNonce(nonce, timestamp);
@@ -34,6 +42,8 @@ async function createPaymentIntent(req, res) {
   try {
     const result = await paymentService.createPaymentIntent({
       orderId,
+      provider,
+      paymentToken,
       stripeToken,
       amount,
       userId: req.user.userId
@@ -43,7 +53,11 @@ async function createPaymentIntent(req, res) {
       eventType: 'PAYMENT_ATTEMPT',
       userId:    req.user.userId,
       ipAddress: req.ip,
-      payload:   { orderId, paymentIntentId: result.paymentIntentId }
+      payload:   {
+        orderId,
+        provider: result.provider,
+        paymentIntentId: result.paymentIntentId
+      }
     });
 
     return res.status(200).json(result);

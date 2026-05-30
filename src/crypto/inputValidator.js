@@ -42,17 +42,52 @@ const orderSchema = z.object({
 });
 
 // Schema tạo payment intent
-const paymentSchema = z.object({
-  orderId: z.string().uuid("orderId must be UUID"),
-  stripeToken: z
-    .string()
-    .startsWith("pm_", "Must be Stripe PaymentMethod token"),
-  amount: z.number().int().positive().max(100_000_000),
+const paymentSchema = z
+  .object({
+    orderId: z.string().uuid("orderId must be UUID"),
+    provider: z.enum(["stripe", "mock_bank"]).optional(),
+    paymentToken: z.string().optional(),
+    stripeToken: z.string().optional(),
+    amount: z.number().int().positive().max(100_000_000),
 
   // Anti-replay fields — required by paymentController
-  nonce: z.string().uuid("nonce must be UUID"),
-  timestamp: z.coerce.number().int().positive(),
-});
+    nonce: z.string().uuid("nonce must be UUID"),
+    timestamp: z.coerce.number().int().positive(),
+  })
+  .superRefine((data, ctx) => {
+    const provider = data.provider || "stripe";
+
+    if (provider === "stripe") {
+      const token = data.paymentToken || data.stripeToken;
+
+      if (!token) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["paymentToken"],
+          message: "Stripe payment requires stripeToken or paymentToken",
+        });
+        return;
+      }
+
+      if (!token.startsWith("pm_")) {
+        ctx.addIssue({
+          code: "custom",
+          path: data.paymentToken ? ["paymentToken"] : ["stripeToken"],
+          message: "Must be Stripe PaymentMethod token",
+        });
+      }
+    }
+
+    if (provider === "mock_bank") {
+      if (!["mock_success", "mock_failed", "mock_pending"].includes(data.paymentToken)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["paymentToken"],
+          message: "Invalid MockBank payment token",
+        });
+      }
+    }
+  });
 
 /**
  * Express middleware factory — validate request.body theo schema

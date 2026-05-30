@@ -4,6 +4,7 @@ const Stripe = require('stripe');
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 const db = require('../db');
 const paymentService = require('./paymentService');
+const orderService = require('../orders/orderService');
 const auditService   = require('../transactions/auditService');
 
 async function handleWebhook(req, res) {
@@ -54,11 +55,22 @@ async function handleWebhook(req, res) {
         const paymentIntent = event.data.object;
         const errorMsg = paymentIntent.last_payment_error?.message || 'Unknown error';
 
-        await db.query(
-          `UPDATE orders SET status = 'failed', updated_at = NOW()
-           WHERE stripe_payment_intent_id = $1`,
+        const orderResult = await db.query(
+          `SELECT id
+           FROM orders
+           WHERE stripe_payment_intent_id = $1
+           LIMIT 1`,
           [paymentIntent.id]
         );
+        const order = orderResult.rows[0];
+
+        if (order) {
+          await orderService.updateOrderStatus(
+            order.id,
+            'payment_failed',
+            paymentIntent.id
+          );
+        }
 
         await auditService.log({
           eventType: 'PAYMENT_FAIL',

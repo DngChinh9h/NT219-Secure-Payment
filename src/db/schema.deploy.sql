@@ -87,11 +87,15 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS cccd_auth_tag VARCHAR(50);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS wrapped_data_key TEXT;
 
 ALTER TABLE transactions ADD COLUMN IF NOT EXISTS jws_receipt TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_provider VARCHAR(50) DEFAULT 'stripe';
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS provider VARCHAR(50) DEFAULT 'stripe';
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS provider_payment_id VARCHAR(255);
 
 -- Indexes (CREATE INDEX IF NOT EXISTS)
 CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_orders_status  ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_transactions_order_id ON transactions(order_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_provider_payment_id ON transactions(provider_payment_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id    ON audit_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_event_type ON audit_logs(event_type);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
