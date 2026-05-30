@@ -47,9 +47,22 @@ describe("mockBankProvider", () => {
     });
   });
 
-  test("refundPayment keeps interface but is not implemented", async () => {
-    await expect(mockBankProvider.refundPayment({})).rejects.toThrow(
-      "Not implemented",
-    );
+  test("refundPayment returns a mock refund id", async () => {
+    const result = await mockBankProvider.refundPayment({
+      providerPaymentId: "mock_pi_123",
+      amount: 50000,
+      reason: "requested_by_customer",
+    });
+
+    expect(result).toMatchObject({
+      provider: "mock_bank",
+      status: "succeeded",
+    });
+    expect(result.refundId).toMatch(/^mock_re_[0-9a-f-]+$/);
+    expect(result.raw).toMatchObject({
+      providerPaymentId: "mock_pi_123",
+      amount: 50000,
+      reason: "requested_by_customer",
+    });
   });
 });

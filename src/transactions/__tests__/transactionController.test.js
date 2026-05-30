@@ -9,7 +9,17 @@ jest.mock("../../db", () => ({
   query: jest.fn(),
 }));
 
-const { verifyReceipt } = require("../transactionController");
+const mockAuditLog = jest.fn();
+const mockVerifyAuditChain = jest.fn();
+jest.mock("../auditService", () => ({
+  log: mockAuditLog,
+  verifyAuditChain: mockVerifyAuditChain,
+}));
+
+const {
+  verifyAuditLogs,
+  verifyReceipt,
+} = require("../transactionController");
 
 function mockResponse() {
   const res = {};
@@ -34,6 +44,12 @@ describe("transactionController verifyReceipt", () => {
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ valid: true, payload });
+    expect(mockAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: "receipt_verified",
+        payload: { valid: true, txId: "tx_1" },
+      }),
+    );
   });
 
   test("returns valid false for tampered receipt without 500", async () => {
@@ -51,6 +67,12 @@ describe("transactionController verifyReceipt", () => {
       valid: false,
       error: "Invalid receipt",
     });
+    expect(mockAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: "receipt_verified",
+        payload: expect.objectContaining({ valid: false }),
+      }),
+    );
   });
 
   test("returns valid false for missing receipt", async () => {
@@ -63,6 +85,45 @@ describe("transactionController verifyReceipt", () => {
     expect(res.json).toHaveBeenCalledWith({
       valid: false,
       error: "Invalid receipt",
+    });
+  });
+});
+
+describe("transactionController verifyAuditLogs", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test("returns audit chain verification result", async () => {
+    mockVerifyAuditChain.mockResolvedValueOnce({ valid: true, checked: 12 });
+
+    const req = { query: {} };
+    const res = mockResponse();
+
+    await verifyAuditLogs(req, res);
+
+    expect(mockVerifyAuditChain).toHaveBeenCalledWith({ limit: 1000 });
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({ valid: true, checked: 12 });
+  });
+
+  test("passes numeric limit to auditService", async () => {
+    mockVerifyAuditChain.mockResolvedValueOnce({
+      valid: false,
+      checked: 2,
+      failedAt: "audit_2",
+    });
+
+    const req = { query: { limit: "50" } };
+    const res = mockResponse();
+
+    await verifyAuditLogs(req, res);
+
+    expect(mockVerifyAuditChain).toHaveBeenCalledWith({ limit: 50 });
+    expect(res.json).toHaveBeenCalledWith({
+      valid: false,
+      checked: 2,
+      failedAt: "audit_2",
     });
   });
 });

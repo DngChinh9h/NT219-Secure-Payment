@@ -348,8 +348,90 @@ async function syncPayment({ paymentIntentId, userId, role }) {
   };
 }
 
+function getProviderNameForTransaction(tx) {
+  return tx.provider || (tx.stripe_payment_id?.startsWith("mock_pi_") ? "mock_bank" : "stripe");
+}
+
+function getProviderPaymentIdForTransaction(tx) {
+  return tx.provider_payment_id || tx.stripe_payment_id;
+}
+
+async function refundTransaction({ transactionId, reason, userId, role }) {
+  const txResult = await db.query(
+    `SELECT t.*, o.status AS order_status, o.id AS order_id, o.user_id AS order_user_id
+     FROM transactions t
+     JOIN orders o ON o.id = t.order_id
+     WHERE t.id = $1
+     LIMIT 1`,
+    [transactionId],
+  );
+
+  const tx = txResult.rows[0];
+
+  if (!tx) {
+    const err = new Error("Transaction not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (role !== "admin" && tx.user_id !== userId) {
+    const err = new Error("Forbidden: transaction belongs to another user");
+    err.statusCode = 403;
+    throw err;
+  }
+
+  if (tx.status === "refunded") {
+    const err = new Error("Transaction already refunded");
+    err.statusCode = 409;
+    throw err;
+  }
+
+  if (tx.status !== "success") {
+    const err = new Error(`Only successful transactions can be refunded. Current status: ${tx.status}`);
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const providerName = getProviderNameForTransaction(tx);
+  const providerModule = getProvider(providerName);
+  const providerPaymentId = getProviderPaymentIdForTransaction(tx);
+
+  const refund = await providerModule.refundPayment({
+    providerPaymentId,
+    amount: tx.amount,
+    reason,
+  });
+
+  const updateResult = await db.query(
+    `UPDATE transactions
+     SET status = 'refunded',
+         refund_id = $1,
+         refunded_at = NOW(),
+         refund_reason = $2
+     WHERE id = $3
+       AND status = 'success'
+     RETURNING *`,
+    [refund.refundId, reason, transactionId],
+  );
+
+  if (updateResult.rowCount === 0) {
+    const err = new Error("Transaction already refunded");
+    err.statusCode = 409;
+    throw err;
+  }
+
+  await orderService.updateOrderStatus(tx.order_id, "refunded", providerPaymentId);
+
+  return {
+    message: "Refund processed",
+    refundId: refund.refundId,
+    transaction: updateResult.rows[0],
+  };
+}
+
 module.exports = {
   createPaymentIntent,
   confirmPayment,
   syncPayment,
+  refundTransaction,
 };

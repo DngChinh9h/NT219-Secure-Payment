@@ -105,6 +105,11 @@ ALTER TABLE transactions ADD COLUMN IF NOT EXISTS jws_receipt TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_provider VARCHAR(50) DEFAULT 'stripe';
 ALTER TABLE transactions ADD COLUMN IF NOT EXISTS provider VARCHAR(50) DEFAULT 'stripe';
 ALTER TABLE transactions ADD COLUMN IF NOT EXISTS provider_payment_id VARCHAR(255);
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS refund_id VARCHAR(255);
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMP;
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS refund_reason TEXT;
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS previous_hash TEXT;
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS current_hash TEXT;
 
 -- Indexes (CREATE INDEX IF NOT EXISTS)
 CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);

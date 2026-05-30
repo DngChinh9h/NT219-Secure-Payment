@@ -13,12 +13,16 @@ jest.mock("../../db", () => ({
 // Mock Stripe — paymentService.js does: const Stripe = require('stripe'); const stripe = Stripe(key);
 const mockPaymentIntentsCreate = jest.fn();
 const mockPaymentIntentsRetrieve = jest.fn();
+const mockRefundsCreate = jest.fn();
 jest.mock("stripe", () => {
   // Return a constructor function that returns the stripe instance
   return jest.fn().mockReturnValue({
     paymentIntents: {
       create: mockPaymentIntentsCreate,
       retrieve: mockPaymentIntentsRetrieve,
+    },
+    refunds: {
+      create: mockRefundsCreate,
     },
   });
 });
@@ -188,6 +192,162 @@ describe("paymentService sync and idempotency", () => {
   });
 });
 
+describe("paymentService refund flow", () => {
+  const transactionId = "770e8400-e29b-41d4-a716-446655440000";
+  const orderId = "550e8400-e29b-41d4-a716-446655440000";
+  const userId = "660e8400-e29b-41d4-a716-446655440000";
+  const successTx = {
+    id: transactionId,
+    order_id: orderId,
+    user_id: userId,
+    amount: 50000,
+    status: "success",
+    provider: "mock_bank",
+    provider_payment_id: "mock_pi_success",
+    stripe_payment_id: "mock_pi_success",
+    order_status: "paid",
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test("refunds a successful mock_bank transaction", async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rowCount: 1, rows: [successTx] })
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{ ...successTx, status: "refunded", refund_id: "mock_re_1" }],
+      });
+
+    const result = await refundTransaction({
+      transactionId,
+      reason: "requested_by_customer",
+      userId,
+      role: "customer",
+    });
+
+    expect(result.message).toBe("Refund processed");
+    expect(result.refundId).toMatch(/^mock_re_/);
+    expect(result.transaction.status).toBe("refunded");
+    expect(orderService.updateOrderStatus).toHaveBeenCalledWith(
+      orderId,
+      "refunded",
+      "mock_pi_success",
+    );
+  });
+
+  test("rejects second refund with 409", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rowCount: 1,
+      rows: [{ ...successTx, status: "refunded" }],
+    });
+
+    await expect(
+      refundTransaction({
+        transactionId,
+        reason: "requested_by_customer",
+        userId,
+        role: "customer",
+      }),
+    ).rejects.toMatchObject({
+      message: "Transaction already refunded",
+      statusCode: 409,
+    });
+  });
+
+  test("rejects refund from another user with 403", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rowCount: 1,
+      rows: [{ ...successTx, user_id: "different-user-id" }],
+    });
+
+    await expect(
+      refundTransaction({
+        transactionId,
+        reason: "requested_by_customer",
+        userId,
+        role: "customer",
+      }),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining("Forbidden"),
+      statusCode: 403,
+    });
+  });
+
+  test("rejects missing transaction with 404", async () => {
+    mockQuery.mockResolvedValueOnce({ rowCount: 0, rows: [] });
+
+    await expect(
+      refundTransaction({
+        transactionId,
+        reason: "requested_by_customer",
+        userId,
+        role: "customer",
+      }),
+    ).rejects.toMatchObject({
+      message: "Transaction not found",
+      statusCode: 404,
+    });
+  });
+
+  test("rejects non-success transaction with 409", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rowCount: 1,
+      rows: [{ ...successTx, status: "failed" }],
+    });
+
+    await expect(
+      refundTransaction({
+        transactionId,
+        reason: "requested_by_customer",
+        userId,
+        role: "customer",
+      }),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining("Only successful transactions"),
+      statusCode: 409,
+    });
+  });
+
+  test("refunds a successful stripe transaction through Stripe refund API", async () => {
+    mockQuery
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [
+          {
+            ...successTx,
+            provider: "stripe",
+            provider_payment_id: "pi_refund",
+            stripe_payment_id: "pi_refund",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{ ...successTx, status: "refunded", refund_id: "re_1" }],
+      });
+    mockRefundsCreate.mockResolvedValueOnce({
+      id: "re_1",
+      status: "succeeded",
+    });
+
+    const result = await refundTransaction({
+      transactionId,
+      reason: "requested_by_customer",
+      userId,
+      role: "customer",
+    });
+
+    expect(result.refundId).toBe("re_1");
+    expect(mockRefundsCreate).toHaveBeenCalledWith({
+      payment_intent: "pi_refund",
+      amount: 50000,
+      reason: "requested_by_customer",
+    });
+  });
+});
+
 // Mock orderService
 jest.mock("../../orders/orderService", () => ({
   getOrderById: jest.fn(),
@@ -204,6 +364,7 @@ const orderService = require("../../orders/orderService");
 const {
   createPaymentIntent,
   confirmPayment,
+  refundTransaction,
   syncPayment,
 } = require("../paymentService");
 

@@ -40,8 +40,19 @@ async function retrievePayment(providerPaymentId) {
   };
 }
 
-async function refundPayment() {
-  throw new Error("Not implemented");
+async function refundPayment({ providerPaymentId, amount, reason }) {
+  const refund = await stripe.refunds.create({
+    payment_intent: providerPaymentId,
+    amount: Number(amount),
+    reason,
+  });
+
+  return {
+    provider: "stripe",
+    refundId: refund.id,
+    status: refund.status,
+    raw: refund,
+  };
 }
 
 module.exports = {

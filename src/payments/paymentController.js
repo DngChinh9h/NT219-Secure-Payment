@@ -59,6 +59,17 @@ async function createPaymentIntent(req, res) {
         paymentIntentId: result.paymentIntentId
       }
     });
+    await auditService.log({
+      eventType: 'payment_intent_created',
+      userId:    req.user.userId,
+      ipAddress: req.ip,
+      payload:   {
+        orderId,
+        provider: result.provider,
+        paymentIntentId: result.paymentIntentId,
+        status: result.status
+      }
+    });
 
     return res.status(200).json(result);
   } catch (err) {
@@ -67,6 +78,12 @@ async function createPaymentIntent(req, res) {
 
     await auditService.log({
       eventType: 'PAYMENT_FAIL',
+      userId:    req.user?.userId,
+      ipAddress: req.ip,
+      payload:   { error: err.message, orderId }
+    });
+    await auditService.log({
+      eventType: 'payment_failed',
       userId:    req.user?.userId,
       ipAddress: req.ip,
       payload:   { error: err.message, orderId }
@@ -85,6 +102,17 @@ async function syncPayment(req, res) {
       role: req.user.role
     });
 
+    await auditService.log({
+      eventType: 'payment_synced',
+      userId: req.user.userId,
+      ipAddress: req.ip,
+      payload: {
+        paymentIntentId: req.params.paymentIntentId,
+        providerStatus: result.providerStatus,
+        orderStatus: result.orderStatus
+      }
+    });
+
     return res.status(200).json(result);
   } catch (err) {
     const status = err.statusCode || 400;
@@ -92,4 +120,37 @@ async function syncPayment(req, res) {
   }
 }
 
-module.exports = { createPaymentIntent, syncPayment };
+async function refundPayment(req, res) {
+  try {
+    const { transactionId, reason } = req.body || {};
+
+    if (!transactionId || !reason) {
+      return res.status(400).json({ error: "transactionId and reason are required" });
+    }
+
+    const result = await paymentService.refundTransaction({
+      transactionId,
+      reason,
+      userId: req.user.userId,
+      role: req.user.role
+    });
+
+    await auditService.log({
+      eventType: 'refund_processed',
+      userId: req.user.userId,
+      ipAddress: req.ip,
+      payload: {
+        transactionId,
+        refundId: result.refundId,
+        reason
+      }
+    });
+
+    return res.status(200).json(result);
+  } catch (err) {
+    const status = err.statusCode || 400;
+    return res.status(status).json({ error: err.message });
+  }
+}
+
+module.exports = { createPaymentIntent, syncPayment, refundPayment };

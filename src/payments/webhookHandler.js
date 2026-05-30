@@ -35,6 +35,10 @@ async function handleWebhook(req, res) {
     eventType: 'WEBHOOK_RECEIVED',
     payload:   { eventType: event.type, eventId: event.id }
   });
+  await auditService.log({
+    eventType: 'webhook_received',
+    payload:   { eventType: event.type, eventId: event.id }
+  });
 
   const paymentIntent = event.data?.object?.object === 'payment_intent'
     ? event.data.object
@@ -55,6 +59,10 @@ async function handleWebhook(req, res) {
   }
 
   if (ledgerEvent?.processing_status === 'processed') {
+    await auditService.log({
+      eventType: 'webhook_duplicate',
+      payload:   { eventType: event.type, eventId: event.id }
+    });
     return res.status(200).json({ received: true, duplicate: true });
   }
 
@@ -68,6 +76,10 @@ async function handleWebhook(req, res) {
 
         await auditService.log({
           eventType: 'PAYMENT_SUCCESS',
+          payload:   { paymentIntentId: paymentIntent.id, txId: tx.id, last4 }
+        });
+        await auditService.log({
+          eventType: 'payment_succeeded',
           payload:   { paymentIntentId: paymentIntent.id, txId: tx.id, last4 }
         });
         break;
@@ -95,6 +107,10 @@ async function handleWebhook(req, res) {
 
         await auditService.log({
           eventType: 'PAYMENT_FAIL',
+          payload:   { paymentIntentId: paymentIntent.id, error: errorMsg }
+        });
+        await auditService.log({
+          eventType: 'payment_failed',
           payload:   { paymentIntentId: paymentIntent.id, error: errorMsg }
         });
         break;

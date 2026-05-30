@@ -47,8 +47,21 @@ async function retrievePayment(providerPaymentId) {
   };
 }
 
-async function refundPayment() {
-  throw new Error("Not implemented");
+async function refundPayment({ providerPaymentId, amount, reason }) {
+  const refundId = `mock_re_${crypto.randomUUID()}`;
+
+  return {
+    provider: "mock_bank",
+    refundId,
+    status: "succeeded",
+    raw: {
+      id: refundId,
+      providerPaymentId,
+      amount: Number(amount),
+      reason,
+      status: "succeeded",
+    },
+  };
 }
 
 module.exports = {
