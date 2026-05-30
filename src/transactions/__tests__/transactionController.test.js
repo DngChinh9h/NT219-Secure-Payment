@@ -5,8 +5,9 @@ jest.mock("../../crypto", () => ({
   verifyReceipt: mockVerifyReceipt,
 }));
 
+const mockQuery = jest.fn();
 jest.mock("../../db", () => ({
-  query: jest.fn(),
+  query: mockQuery,
 }));
 
 const mockAuditLog = jest.fn();
@@ -17,6 +18,7 @@ jest.mock("../auditService", () => ({
 }));
 
 const {
+  getMyTransactions,
   verifyAuditLogs,
   verifyReceipt,
 } = require("../transactionController");
@@ -27,6 +29,45 @@ function mockResponse() {
   res.json = jest.fn().mockReturnValue(res);
   return res;
 }
+
+describe("transactionController getMyTransactions", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test("returns provider and refund fields with legacy transaction fields", async () => {
+    const row = {
+      id: "tx_1",
+      amount: "50000",
+      currency: "vnd",
+      status: "refunded",
+      provider: "mock_bank",
+      provider_payment_id: "mock_pi_1",
+      refund_id: "mock_re_1",
+      refunded_at: null,
+      refund_reason: "requested_by_customer",
+      stripe_token_last4: null,
+      jws_receipt: "receipt",
+      created_at: "2026-05-30T00:00:00.000Z",
+      order_id: "order_1",
+    };
+    mockQuery.mockResolvedValueOnce({ rows: [row] });
+
+    const req = { user: { userId: "user_1" } };
+    const res = mockResponse();
+
+    await getMyTransactions(req, res);
+
+    expect(mockQuery.mock.calls[0][0]).toContain("t.provider");
+    expect(mockQuery.mock.calls[0][0]).toContain("t.provider_payment_id");
+    expect(mockQuery.mock.calls[0][0]).toContain("t.refund_id");
+    expect(mockQuery.mock.calls[0][0]).toContain("t.refunded_at");
+    expect(mockQuery.mock.calls[0][0]).toContain("t.refund_reason");
+    expect(mockQuery.mock.calls[0][1]).toEqual(["user_1"]);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({ transactions: [row] });
+  });
+});
 
 describe("transactionController verifyReceipt", () => {
   beforeEach(() => {

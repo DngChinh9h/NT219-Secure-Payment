@@ -6,6 +6,8 @@ async function getMyTransactions(req, res) {
   try {
     const result = await db.query(
       `SELECT t.id, t.amount, t.currency, t.status,
+              t.provider, t.provider_payment_id,
+              t.refund_id, t.refunded_at, t.refund_reason,
               t.stripe_token_last4, t.jws_receipt, t.created_at,
               o.id as order_id
        FROM transactions t
