@@ -1,13 +1,17 @@
 "use strict";
 require("dotenv").config();
 const express = require("express");
+const cors = require("cors");
 const path = require("path");
+const { createCorsOptions } = require("./config/corsConfig");
 const app = express();
 const {
   generalLimiter,
   loginLimiter,
   paymentLimiter,
 } = require("./gateway/rateLimiter");
+
+app.use(cors(createCorsOptions()));
 
 app.post(
   "/api/payments/webhook",
@@ -33,6 +37,7 @@ app.get(["/", "/frontend", "/frontend/"], (req, res) => {
 app.use("/frontend", express.static(frontendDir));
 
 app.use("/api/auth", require("./auth/authRoutes"));
+app.use("/api/config", require("./config/configRoutes"));
 app.use("/api/orders", require("./orders/orderRoutes"));
 app.use("/api/payments", require("./payments/paymentRoutes"));
 app.use("/api/transactions", require("./transactions/transactionRoutes"));
