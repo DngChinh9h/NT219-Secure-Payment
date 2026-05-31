@@ -2,6 +2,7 @@
     const db   = require('../db');
     const bcrypt = require('bcryptjs');
     const { encryptUserPII } = require('./piiService');
+    const BCRYPT_ROUNDS = 12;
     
     async function findByEmail(email) {
       const result = await db.query(
@@ -19,8 +20,12 @@
       return result.rows[0] || null;
     }
     
+    async function hashPassword(password) {
+      return bcrypt.hash(password, BCRYPT_ROUNDS);
+    }
+
     async function createUser({ email, password, fullName, address, cccdNumber, role = 'customer' }) {
-      const passwordHash = await bcrypt.hash(password, 12);
+      const passwordHash = await hashPassword(password);
 
       // Mã hóa PII nếu có (bắt buộc trong registerSchema)
       const pii = encryptUserPII({ fullName, address, cccdNumber });
@@ -50,4 +55,4 @@
       return bcrypt.compare(plainPassword, passwordHash);
     }
     
-    module.exports = { findByEmail, findById, createUser, verifyPassword };
+    module.exports = { findByEmail, findById, createUser, verifyPassword, hashPassword };

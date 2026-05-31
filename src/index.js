@@ -2,7 +2,6 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const path = require("path");
 const { createCorsOptions } = require("./config/corsConfig");
 const app = express();
 const {
@@ -28,13 +27,13 @@ app.use("/api", generalLimiter);
 app.use("/api/auth/login", loginLimiter);
 app.use("/api/payments", paymentLimiter);
 
-const frontendDir = path.join(__dirname, "frontend");
-
-app.get(["/", "/frontend", "/frontend/"], (req, res) => {
-  res.sendFile(path.join(frontendDir, "index.html"));
+app.get("/", (req, res) => {
+  res.json({
+    name: "NT219 Secure Payment API",
+    status: "ok",
+    health: "/health",
+  });
 });
-
-app.use("/frontend", express.static(frontendDir));
 
 app.use("/api/auth", require("./auth/authRoutes"));
 app.use("/api/config", require("./config/configRoutes"));

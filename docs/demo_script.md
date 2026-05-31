@@ -3,7 +3,7 @@
 ## Chuẩn bị trước khi demo
 1. Chạy `docker compose up` — đảm bảo DB và app đang chạy
 2. Chạy `stripe listen --forward-to localhost:3000/api/payments/webhook` — terminal riêng
-3. Mở browser: http://localhost:3000/frontend
+3. Kiểm tra API: http://localhost:3000/ và http://localhost:3000/health
 4. Mở Postman với collection đã chuẩn bị
 
 ---

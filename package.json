@@ -24,7 +24,8 @@
     "test": "jest --runInBand",
     "test:ci": "jest --coverage",
     "migrate:deploy": "node src/db/migrateDeploy.js",
-    "start:prod": "node src/db/migrateDeploy.js && node src/db/seed.js && node src/index.js",
+    "seed:admin": "node src/db/seedAdmin.js",
+    "start:prod": "node src/db/migrateDeploy.js && node src/index.js",
     "smoke": "node scripts/smoke-check.js"
   },
   "dependencies": {
