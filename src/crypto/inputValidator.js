@@ -89,6 +89,20 @@ const paymentSchema = z
     }
   });
 
+const refundRequestSchema = z.object({
+  orderId: z.string().uuid("orderId must be UUID"),
+  reason: z.string().trim().min(1, "reason is required").max(255),
+  details: z.string().trim().max(2000).optional(),
+});
+
+const refundRequestRejectSchema = z.object({
+  adminNote: z.string().trim().min(1, "adminNote is required").max(2000),
+});
+
+const refundRequestIdSchema = z.object({
+  id: z.string().uuid("refund request id must be UUID"),
+});
+
 /**
  * Express middleware factory — validate request.body theo schema
  *
@@ -112,10 +126,28 @@ function validate(schema) {
   };
 }
 
+function validateParams(schema) {
+  return (req, res, next) => {
+    const result = schema.safeParse(req.params);
+    if (!result.success) {
+      return res.status(400).json({
+        error: "Validation failed",
+        details: result.error.flatten().fieldErrors,
+      });
+    }
+    req.params = result.data;
+    next();
+  };
+}
+
 module.exports = {
   validate,
+  validateParams,
   registerSchema,
   loginSchema,
   orderSchema,
   paymentSchema,
+  refundRequestSchema,
+  refundRequestRejectSchema,
+  refundRequestIdSchema,
 };

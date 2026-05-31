@@ -88,6 +88,34 @@ CREATE TABLE IF NOT EXISTS webhook_events (
   UNIQUE(provider, provider_event_id)
 );
 
+CREATE TABLE IF NOT EXISTS refund_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id UUID NOT NULL REFERENCES orders(id),
+  transaction_id UUID REFERENCES transactions(id),
+  user_id UUID NOT NULL REFERENCES users(id),
+  amount BIGINT NOT NULL,
+  provider VARCHAR(50),
+  provider_payment_id VARCHAR(255),
+  reason TEXT NOT NULL,
+  details TEXT,
+  status VARCHAR(50) NOT NULL DEFAULT 'pending_review'
+    CHECK (status IN (
+      'pending_review',
+      'cancelled',
+      'rejected',
+      'approved_processing',
+      'succeeded',
+      'provider_failed'
+    )),
+  admin_note TEXT,
+  provider_refund_id VARCHAR(255),
+  provider_error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  reviewed_at TIMESTAMPTZ,
+  reviewed_by UUID REFERENCES users(id)
+);
+
 -- Upgrade columns for existing tables
 ALTER TABLE users ADD COLUMN IF NOT EXISTS key_version INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'customer';
@@ -124,6 +152,13 @@ CREATE INDEX IF NOT EXISTS idx_webhook_events_provider_payment_id
 ON webhook_events(provider_payment_id);
 CREATE INDEX IF NOT EXISTS idx_webhook_events_status
 ON webhook_events(processing_status);
+CREATE INDEX IF NOT EXISTS idx_refund_requests_user_id
+ON refund_requests(user_id);
+CREATE INDEX IF NOT EXISTS idx_refund_requests_status
+ON refund_requests(status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_refund_requests_active_order_unique
+ON refund_requests(order_id)
+WHERE status IN ('pending_review', 'approved_processing');
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id    ON audit_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_event_type ON audit_logs(event_type);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);

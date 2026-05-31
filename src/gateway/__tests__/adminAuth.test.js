@@ -6,7 +6,7 @@ jest.mock("../../crypto", () => ({
 }));
 
 const { authenticate } = require("../authMiddleware");
-const { requireRole } = require("../authzMiddleware");
+const { requireAdmin } = require("../authzMiddleware");
 
 function mockResponse() {
   const res = {};
@@ -33,9 +33,7 @@ describe("admin authorization middleware", () => {
     mockVerifyJWT.mockReturnValueOnce({ userId: "customer-id", role: "customer" });
     const req = { headers: { authorization: "Bearer customer-token" } };
     const res = mockResponse();
-    const adminGuard = requireRole("admin");
-
-    authenticate(req, res, () => adminGuard(req, res, jest.fn()));
+    authenticate(req, res, () => requireAdmin(req, res, jest.fn()));
 
     expect(res.status).toHaveBeenCalledWith(403);
   });
@@ -45,9 +43,7 @@ describe("admin authorization middleware", () => {
     const req = { headers: { authorization: "Bearer admin-token" } };
     const res = mockResponse();
     const next = jest.fn();
-    const adminGuard = requireRole("admin");
-
-    authenticate(req, res, () => adminGuard(req, res, next));
+    authenticate(req, res, () => requireAdmin(req, res, next));
 
     expect(next).toHaveBeenCalled();
     expect(res.status).not.toHaveBeenCalled();

@@ -45,4 +45,6 @@ function requireRole(...roles) {
   };
 }
 
-module.exports = { requireOwnership, requireRole };
+const requireAdmin = requireRole("admin");
+
+module.exports = { requireOwnership, requireRole, requireAdmin };
