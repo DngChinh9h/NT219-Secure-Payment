@@ -69,6 +69,11 @@ async function verifyReceipt(jws) {
       decoded.header?.kid ||
       signingKeyService.LEGACY_KEY_VERSION,
   );
+
+  if (!Number.isInteger(keyVersion) || keyVersion < 1) {
+    throw new Error("Invalid receipt signing key version");
+  }
+
   const storedPublicKey = await signingKeyService.getPublicKeyForVersion(keyVersion);
   const publicKey =
     storedPublicKey ||
@@ -91,9 +96,12 @@ function isReceiptSigningEnabled() {
 
 async function getReceiptSigningStatus() {
   const keyStatus = await signingKeyService.getKeyStatus();
+  const hasUsableStoredKey =
+    keyStatus.keyRotationEnabled &&
+    keyStatus.keys.some((key) => key.active);
 
   return {
-    receiptSigningEnabled: isReceiptSigningEnabled() || keyStatus.keys.length > 0,
+    receiptSigningEnabled: isReceiptSigningEnabled() || hasUsableStoredKey,
     currentKeyVersion: keyStatus.activeKeyVersion,
     keyRotationEnabled: keyStatus.keyRotationEnabled,
     availableKeyVersions: keyStatus.availableKeyVersions,

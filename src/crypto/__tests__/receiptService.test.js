@@ -112,4 +112,22 @@ describe("receiptService", () => {
 
     await expect(receiptService.verifyReceipt(parts.join("."))).rejects.toThrow();
   });
+
+  test("rejects a malformed key_version before querying the key store", async () => {
+    const privateKey = fs.readFileSync(path.join(keysDir, "private.pem"));
+    const receipt = jwt.sign(
+      { type: "payment_receipt", ...samplePayload, key_version: "invalid" },
+      privateKey,
+      {
+        algorithm: "RS256",
+        issuer: "payment-system",
+        audience: "payment-receipt",
+      },
+    );
+
+    await expect(receiptService.verifyReceipt(receipt)).rejects.toThrow(
+      "Invalid receipt signing key version",
+    );
+    expect(mockGetPublicKeyForVersion).not.toHaveBeenCalled();
+  });
 });

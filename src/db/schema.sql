@@ -1,5 +1,6 @@
 -- Xóa và tạo lại (chỉ dùng khi dev)
     DROP TABLE IF EXISTS audit_logs CASCADE;
+    DROP TABLE IF EXISTS receipt_signing_keys CASCADE;
     DROP TABLE IF EXISTS transactions CASCADE;
     DROP TABLE IF EXISTS order_items CASCADE;
     DROP TABLE IF EXISTS orders CASCADE;
@@ -92,6 +93,19 @@
       hmac_sig    VARCHAR(128),   -- HMAC ký log entry
       created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    -- Receipt signing keys - preserve old public keys so receipts remain verifiable after rotation.
+    CREATE TABLE receipt_signing_keys (
+      key_version          INTEGER PRIMARY KEY,
+      public_key           TEXT NOT NULL,
+      encrypted_private_key TEXT NOT NULL,
+      private_key_iv       VARCHAR(50) NOT NULL,
+      private_key_auth_tag VARCHAR(50) NOT NULL,
+      wrapped_data_key     TEXT NOT NULL,
+      active               BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      rotated_at           TIMESTAMPTZ
+    );
     
     -- Indexes
     CREATE INDEX idx_orders_user_id ON orders(user_id);
@@ -100,4 +114,6 @@
     CREATE INDEX idx_audit_logs_user_id    ON audit_logs(user_id);
     CREATE INDEX idx_audit_logs_event_type ON audit_logs(event_type);
     CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at);
-    
+    CREATE UNIQUE INDEX idx_receipt_signing_keys_single_active
+      ON receipt_signing_keys(active)
+      WHERE active = TRUE;
