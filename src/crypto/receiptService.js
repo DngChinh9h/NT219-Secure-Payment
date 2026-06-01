@@ -54,4 +54,8 @@ function verifyReceipt(jws) {
   });
 }
 
-module.exports = { createSignedReceipt, verifyReceipt };
+function isReceiptSigningEnabled() {
+  return Boolean(PRIVATE_KEY && PUBLIC_KEY);
+}
+
+module.exports = { createSignedReceipt, verifyReceipt, isReceiptSigningEnabled };

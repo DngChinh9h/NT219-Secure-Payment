@@ -80,7 +80,15 @@ async function handleWebhook(req, res) {
         });
         await auditService.log({
           eventType: 'payment_succeeded',
-          payload:   { paymentIntentId: paymentIntent.id, txId: tx.id, last4 }
+          targetType: 'transaction',
+          targetId: tx.id,
+          metadata:  { paymentIntentId: paymentIntent.id, last4 }
+        });
+        await auditService.log({
+          eventType: 'receipt_issued',
+          targetType: 'transaction',
+          targetId: tx.id,
+          metadata:  { paymentIntentId: paymentIntent.id }
         });
         break;
       }

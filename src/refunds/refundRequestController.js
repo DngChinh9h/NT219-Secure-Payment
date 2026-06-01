@@ -11,10 +11,12 @@ async function createRefundRequest(req, res) {
     });
 
     await auditService.log({
-      eventType: "refund_request_created",
-      userId: req.user.userId,
+      eventType: "refund_requested",
+      actorUserId: req.user.userId,
+      targetType: "refund_request",
+      targetId: request.id,
       ipAddress: req.ip,
-      payload: { requestId: request.id, orderId: request.order_id },
+      metadata: { orderId: request.order_id },
     });
 
     return res.status(201).json({ refundRequest: request });
@@ -72,10 +74,12 @@ async function rejectRefundRequest(req, res) {
     });
 
     await auditService.log({
-      eventType: "refund_request_rejected",
-      userId: req.user.userId,
+      eventType: "admin_rejected_refund",
+      actorUserId: req.user.userId,
+      targetType: "refund_request",
+      targetId: request.id,
       ipAddress: req.ip,
-      payload: { requestId: request.id, orderId: request.order_id },
+      metadata: { orderId: request.order_id },
     });
 
     return res.status(200).json({ refundRequest: request });
@@ -93,16 +97,35 @@ async function approveRefundRequest(req, res) {
     });
 
     await auditService.log({
-      eventType: `refund_request_${result.request.status}`,
-      userId: req.user.userId,
+      eventType: "refund_approved",
+      actorUserId: req.user.userId,
+      targetType: "refund_request",
+      targetId: result.request.id,
       ipAddress: req.ip,
-      payload: {
-        requestId: result.request.id,
+      metadata: {
         orderId: result.request.order_id,
         refundId: result.refund.refundId,
         providerStatus: result.refund.providerStatus,
       },
     });
+    if (result.refund.providerStatus !== "pending") {
+      await auditService.log({
+        eventType:
+          result.refund.providerStatus === "succeeded"
+            ? "provider_refund_succeeded"
+            : "provider_refund_failed",
+        actorUserId: req.user.userId,
+        targetType: "refund_request",
+        targetId: result.request.id,
+        ipAddress: req.ip,
+        metadata: {
+          orderId: result.request.order_id,
+          refundId: result.refund.refundId,
+          providerStatus: result.refund.providerStatus,
+          providerError: result.refund.providerError || null,
+        },
+      });
+    }
 
     return res.status(200).json({
       message: result.refund.message,
@@ -110,6 +133,14 @@ async function approveRefundRequest(req, res) {
       refund: result.refund,
     });
   } catch (err) {
+    await auditService.log({
+      eventType: "provider_refund_failed",
+      actorUserId: req.user.userId,
+      targetType: "refund_request",
+      targetId: req.params.id,
+      ipAddress: req.ip,
+      metadata: { providerError: err.message },
+    });
     return res.status(err.statusCode || 502).json({ error: err.message });
   }
 }

@@ -67,10 +67,17 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   event_type  VARCHAR(50) NOT NULL,
   user_id     UUID REFERENCES users(id),
+  actor_user_id UUID REFERENCES users(id),
+  target_type VARCHAR(100),
+  target_id   VARCHAR(255),
   ip_address  INET,
   user_agent  TEXT,
   payload     JSONB,
+  metadata    JSONB,
   hmac_sig    VARCHAR(128),
+  prev_hash   TEXT,
+  current_hash TEXT,
+  chain_version VARCHAR(50),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -141,6 +148,12 @@ ALTER TABLE transactions ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMP;
 ALTER TABLE transactions ADD COLUMN IF NOT EXISTS refund_reason TEXT;
 ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS previous_hash TEXT;
 ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS current_hash TEXT;
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS actor_user_id UUID;
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS target_type VARCHAR(100);
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS target_id VARCHAR(255);
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS metadata JSONB;
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS prev_hash TEXT;
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS chain_version VARCHAR(50);
 ALTER TABLE refund_requests ADD COLUMN IF NOT EXISTS admin_decision VARCHAR(50);
 ALTER TABLE refund_requests ADD COLUMN IF NOT EXISTS provider_status VARCHAR(50);
 
@@ -166,3 +179,4 @@ WHERE status IN ('pending_review', 'approved_processing');
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id    ON audit_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_event_type ON audit_logs(event_type);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_target ON audit_logs(target_type, target_id);

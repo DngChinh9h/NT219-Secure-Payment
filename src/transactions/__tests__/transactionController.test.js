@@ -88,7 +88,9 @@ describe("transactionController verifyReceipt", () => {
     expect(mockAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
         eventType: "receipt_verified",
-        payload: { valid: true, txId: "tx_1" },
+        targetType: "transaction",
+        targetId: "tx_1",
+        metadata: { valid: true },
       }),
     );
   });
@@ -111,7 +113,7 @@ describe("transactionController verifyReceipt", () => {
     expect(mockAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
         eventType: "receipt_verified",
-        payload: expect.objectContaining({ valid: false }),
+        metadata: expect.objectContaining({ valid: false }),
       }),
     );
   });

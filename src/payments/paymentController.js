@@ -70,6 +70,36 @@ async function createPaymentIntent(req, res) {
         status: result.status
       }
     });
+    await auditService.log({
+      eventType: 'payment_created',
+      actorUserId: req.user.userId,
+      targetType: 'order',
+      targetId: orderId,
+      ipAddress: req.ip,
+      metadata: {
+        provider: result.provider,
+        providerPaymentId: result.paymentIntentId,
+        status: result.status
+      }
+    });
+    if (result.provider === 'mock_bank' && result.status === 'succeeded') {
+      await auditService.log({
+        eventType: 'payment_succeeded',
+        actorUserId: req.user.userId,
+        targetType: 'order',
+        targetId: orderId,
+        ipAddress: req.ip,
+        metadata: { providerPaymentId: result.paymentIntentId }
+      });
+      await auditService.log({
+        eventType: 'receipt_issued',
+        actorUserId: req.user.userId,
+        targetType: 'order',
+        targetId: orderId,
+        ipAddress: req.ip,
+        metadata: { providerPaymentId: result.paymentIntentId }
+      });
+    }
 
     return res.status(200).json(result);
   } catch (err) {
@@ -138,11 +168,13 @@ async function refundPayment(req, res) {
     await auditService.log({
       eventType:
         result.providerStatus === 'succeeded'
-          ? 'refund_processed'
-          : `refund_provider_${result.providerStatus}`,
-      userId: req.user.userId,
+          ? 'provider_refund_succeeded'
+          : 'provider_refund_failed',
+      actorUserId: req.user.userId,
+      targetType: 'transaction',
+      targetId: transactionId,
       ipAddress: req.ip,
-      payload: {
+      metadata: {
         transactionId,
         refundId: result.refundId,
         reason,

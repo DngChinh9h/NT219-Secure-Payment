@@ -26,6 +26,7 @@
     "migrate:deploy": "node src/db/migrateDeploy.js",
     "seed:admin": "node src/db/seedAdmin.js",
     "e2e:refund": "node scripts/e2e-refund-flow.js",
+    "e2e:security": "node scripts/e2e-security-evidence.js",
     "start:prod": "node src/db/migrateDeploy.js && node src/index.js",
     "smoke": "node scripts/smoke-check.js"
   },

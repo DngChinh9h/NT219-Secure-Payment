@@ -1,6 +1,7 @@
 "use strict";
 const userService = require("../users/userService");
 const { signJWT } = require("../crypto/jwtHelper");
+const auditService = require("../transactions/auditService");
 
 async function register(req, res) {
   try {
@@ -25,6 +26,16 @@ async function register(req, res) {
       userId: user.id,
       email: user.email,
       role: user.role,
+    });
+
+    await auditService.log({
+      eventType: "user_register",
+      actorUserId: user.id,
+      targetType: "user",
+      targetId: user.id,
+      metadata: { role: user.role },
+      ipAddress: req.ip,
+      userAgent: req.headers?.["user-agent"] || null,
     });
 
     return res.status(201).json({
@@ -59,6 +70,16 @@ async function login(req, res) {
       userId: user.id,
       email: user.email,
       role: user.role,
+    });
+
+    await auditService.log({
+      eventType: "user_login",
+      actorUserId: user.id,
+      targetType: "user",
+      targetId: user.id,
+      metadata: { role: user.role },
+      ipAddress: req.ip,
+      userAgent: req.headers?.["user-agent"] || null,
     });
 
     return res.status(200).json({

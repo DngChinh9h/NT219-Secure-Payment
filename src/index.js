@@ -40,6 +40,7 @@ app.use("/api/config", require("./config/configRoutes"));
 app.use("/api/orders", require("./orders/orderRoutes"));
 app.use("/api/payments", require("./payments/paymentRoutes"));
 app.use("/api/refund-requests", require("./refunds/refundRequestRoutes"));
+app.use("/api/admin/security", require("./security/securityRoutes"));
 app.use("/api/admin", require("./refunds/adminRefundRequestRoutes"));
 app.use("/api/transactions", require("./transactions/transactionRoutes"));
 

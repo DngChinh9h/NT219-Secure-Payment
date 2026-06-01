@@ -33,3 +33,10 @@ check("velocity check import", () => {
   if (typeof checkVelocity !== "function") throw new Error("checkVelocity missing");
   if (typeof recordFailure !== "function") throw new Error("recordFailure missing");
 });
+
+check("security evidence service import", () => {
+  const { getSecurityEvidence } = require("../src/security/securityEvidenceService");
+  if (typeof getSecurityEvidence !== "function") {
+    throw new Error("getSecurityEvidence missing");
+  }
+});

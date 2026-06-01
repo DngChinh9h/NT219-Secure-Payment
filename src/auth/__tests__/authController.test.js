@@ -12,6 +12,11 @@ jest.mock("../../crypto/jwtHelper", () => ({
   signJWT: mockSignJWT,
 }));
 
+const mockAuditLog = jest.fn();
+jest.mock("../../transactions/auditService", () => ({
+  log: mockAuditLog,
+}));
+
 const { login } = require("../authController");
 
 function mockResponse() {
@@ -60,5 +65,11 @@ describe("authController admin login", () => {
       },
     });
     expect(JSON.stringify(res.json.mock.calls[0][0])).not.toContain("bcrypt-hash");
+    expect(mockAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: "user_login",
+        actorUserId: "admin-id",
+      }),
+    );
   });
 });

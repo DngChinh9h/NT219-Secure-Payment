@@ -1,6 +1,7 @@
 "use strict";
 const orderService = require("./orderService");
 const { requireOwnership } = require("../gateway/authzMiddleware");
+const auditService = require("../transactions/auditService");
 
 async function createOrder(req, res) {
   try {
@@ -10,6 +11,14 @@ async function createOrder(req, res) {
       items,
       shippingAddress,
       totalAmount,
+    });
+    await auditService.log({
+      eventType: "order_created",
+      actorUserId: req.user.userId,
+      targetType: "order",
+      targetId: order.id,
+      metadata: { totalAmount: order.total_amount },
+      ipAddress: req.ip,
     });
     return res.status(201).json({ message: "Order created", order });
   } catch (err) {

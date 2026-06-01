@@ -38,7 +38,11 @@ async function verifyAuditLogs(req, res) {
     const auditService = require('./auditService');
     const limit = req.query.limit ? Number(req.query.limit) : 1000;
     const result = await auditService.verifyAuditChain({ limit });
-    return res.status(200).json(result);
+    return res.status(200).json(
+      result.valid
+        ? result
+        : { ...result, failedAt: result.brokenAt || result.failedAt },
+    );
   } catch (err) {
     return res.status(500).json({ error: 'Failed to verify audit logs' });
   }
@@ -76,7 +80,8 @@ async function verifyReceipt(req, res) {
     if (!receipt || typeof receipt !== "string") {
       await auditService.log({
         eventType: "receipt_verified",
-        payload: { valid: false, reason: "missing_or_invalid_receipt" },
+        targetType: "receipt",
+        metadata: { valid: false, reason: "missing_or_invalid_receipt" },
       });
 
       return res.status(400).json({
@@ -88,15 +93,18 @@ async function verifyReceipt(req, res) {
     const payload = verifySignedReceipt(receipt);
     await auditService.log({
       eventType: "receipt_verified",
-      userId: payload.userId || null,
-      payload: { valid: true, txId: payload.txId || null },
+      actorUserId: payload.userId || null,
+      targetType: "transaction",
+      targetId: payload.txId || null,
+      metadata: { valid: true },
     });
 
     return res.status(200).json({ valid: true, payload });
   } catch (err) {
     await auditService.log({
       eventType: "receipt_verified",
-      payload: { valid: false, reason: err.message },
+      targetType: "receipt",
+      metadata: { valid: false, reason: err.message },
     });
 
     return res.status(200).json({
