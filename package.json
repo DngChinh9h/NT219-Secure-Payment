@@ -27,6 +27,7 @@
     "seed:admin": "node src/db/seedAdmin.js",
     "e2e:refund": "node scripts/e2e-refund-flow.js",
     "e2e:security": "node scripts/e2e-security-evidence.js",
+    "e2e:key-rotation": "node scripts/e2e-key-rotation.js",
     "start:prod": "node src/db/migrateDeploy.js && node src/index.js",
     "smoke": "node scripts/smoke-check.js"
   },

@@ -16,7 +16,25 @@ jest.mock("../../transactions/auditService", () => ({
 }));
 
 jest.mock("../../crypto/receiptService", () => ({
-  isReceiptSigningEnabled: jest.fn(() => true),
+  getReceiptSigningStatus: jest.fn(async () => ({
+    receiptSigningEnabled: true,
+    currentKeyVersion: 1,
+    keyRotationEnabled: true,
+    availableKeyVersions: [1],
+  })),
+}));
+
+jest.mock("../../crypto/receiptSigningKeyService", () => ({
+  getKeyStatus: jest.fn(async () => ({
+    activeKeyVersion: 1,
+    availableKeyVersions: [1],
+    keys: [],
+  })),
+  rotateSigningKey: jest.fn(async () => ({
+    activeKeyVersion: 2,
+    availableKeyVersions: [1, 2],
+    keys: [{ keyVersion: 2, active: true }],
+  })),
 }));
 
 const securityRoutes = require("../securityRoutes");
@@ -60,9 +78,15 @@ describe("securityRoutes HTTP authorization", () => {
       const chain = await fetch(
         `${baseUrl}/api/admin/security/audit-chain/verify`,
       );
+      const keys = await fetch(`${baseUrl}/api/admin/security/keys/status`);
+      const rotate = await fetch(`${baseUrl}/api/admin/security/keys/rotate`, {
+        method: "POST",
+      });
 
       expect(evidence.status).toBe(401);
       expect(chain.status).toBe(401);
+      expect(keys.status).toBe(401);
+      expect(rotate.status).toBe(401);
     });
   });
 
@@ -78,9 +102,18 @@ describe("securityRoutes HTTP authorization", () => {
         `${baseUrl}/api/admin/security/audit-chain/verify`,
         { headers },
       );
+      const keys = await fetch(`${baseUrl}/api/admin/security/keys/status`, {
+        headers,
+      });
+      const rotate = await fetch(`${baseUrl}/api/admin/security/keys/rotate`, {
+        method: "POST",
+        headers,
+      });
 
       expect(evidence.status).toBe(403);
       expect(chain.status).toBe(403);
+      expect(keys.status).toBe(403);
+      expect(rotate.status).toBe(403);
     });
   });
 
@@ -113,6 +146,36 @@ describe("securityRoutes HTTP authorization", () => {
       expect(chainResponse.status).toBe(200);
       expect(chain).toEqual({ valid: true, checked: 3, brokenAt: null });
       expect(chain.checked).toBeGreaterThan(0);
+    });
+  });
+
+  test("admin can inspect status and rotate without receiving private keys", async () => {
+    mockVerifyJWT.mockReturnValue({ userId: "admin_1", role: "admin" });
+
+    await withServer(async (baseUrl) => {
+      const headers = { Authorization: "Bearer admin-token" };
+      const statusResponse = await fetch(
+        `${baseUrl}/api/admin/security/keys/status`,
+        { headers },
+      );
+      const status = await statusResponse.json();
+      const rotateResponse = await fetch(
+        `${baseUrl}/api/admin/security/keys/rotate`,
+        { method: "POST", headers },
+      );
+      const rotated = await rotateResponse.json();
+
+      expect(statusResponse.status).toBe(200);
+      expect(status).toMatchObject({
+        activeKeyVersion: 1,
+        availableKeyVersions: [1],
+      });
+      expect(rotateResponse.status).toBe(200);
+      expect(rotated).toMatchObject({
+        activeKeyVersion: 2,
+        availableKeyVersions: [1, 2],
+      });
+      expect(JSON.stringify({ status, rotated })).not.toMatch(/private|encrypted/i);
     });
   });
 });

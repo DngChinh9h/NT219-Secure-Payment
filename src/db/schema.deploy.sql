@@ -125,6 +125,18 @@ CREATE TABLE IF NOT EXISTS refund_requests (
   reviewed_by UUID REFERENCES users(id)
 );
 
+CREATE TABLE IF NOT EXISTS receipt_signing_keys (
+  key_version INTEGER PRIMARY KEY,
+  public_key TEXT NOT NULL,
+  encrypted_private_key TEXT NOT NULL,
+  private_key_iv VARCHAR(50) NOT NULL,
+  private_key_auth_tag VARCHAR(50) NOT NULL,
+  wrapped_data_key TEXT NOT NULL,
+  active BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  rotated_at TIMESTAMPTZ
+);
+
 -- Upgrade columns for existing tables
 ALTER TABLE users ADD COLUMN IF NOT EXISTS key_version INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'customer';
@@ -180,3 +192,6 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id    ON audit_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_event_type ON audit_logs(event_type);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_target ON audit_logs(target_type, target_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_receipt_signing_keys_single_active
+ON receipt_signing_keys(active)
+WHERE active = TRUE;

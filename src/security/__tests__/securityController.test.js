@@ -17,6 +17,13 @@ jest.mock("../securityEvidenceService", () => ({
   getSecurityEvidence: mockGetSecurityEvidence,
 }));
 
+const mockGetKeyStatus = jest.fn();
+const mockRotateSigningKey = jest.fn();
+jest.mock("../../crypto/receiptSigningKeyService", () => ({
+  getKeyStatus: mockGetKeyStatus,
+  rotateSigningKey: mockRotateSigningKey,
+}));
+
 const controller = require("../securityController");
 
 function mockResponse() {
@@ -83,6 +90,42 @@ describe("securityController", () => {
         eventType: "receipt_verified",
         actorUserId: "admin_1",
         targetId: "tx_1",
+      }),
+    );
+  });
+
+  test("returns safe receipt signing key status", async () => {
+    const status = {
+      activeKeyVersion: 2,
+      availableKeyVersions: [1, 2],
+      keys: [{ keyVersion: 2, active: true }],
+    };
+    mockGetKeyStatus.mockResolvedValueOnce(status);
+    const res = mockResponse();
+
+    await controller.getReceiptSigningKeyStatus({}, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(status);
+    expect(JSON.stringify(res.json.mock.calls[0][0])).not.toMatch(/private|encrypted/i);
+  });
+
+  test("rotates signing key and records an audit event", async () => {
+    mockRotateSigningKey.mockResolvedValueOnce({
+      activeKeyVersion: 3,
+      availableKeyVersions: [1, 2, 3],
+    });
+    const req = { user: { userId: "admin_1" }, ip: "127.0.0.1" };
+    const res = mockResponse();
+
+    await controller.rotateReceiptSigningKey(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: "receipt_signing_key_rotated",
+        actorUserId: "admin_1",
+        targetId: "3",
       }),
     );
   });

@@ -1,22 +1,40 @@
 "use strict";
 
+const crypto = require("crypto");
 const path = require("path");
 const fs = require("fs");
+const jwt = require("jsonwebtoken");
 
-// Verify RSA keys exist before running tests
+const mockGetActiveSigningKey = jest.fn();
+const mockGetPublicKeyForVersion = jest.fn();
+const mockGetKeyStatus = jest.fn();
+jest.mock("../receiptSigningKeyService", () => ({
+  LEGACY_KEY_VERSION: 1,
+  getActiveSigningKey: mockGetActiveSigningKey,
+  getPublicKeyForVersion: mockGetPublicKeyForVersion,
+  getKeyStatus: mockGetKeyStatus,
+}));
+
 const keysDir = path.join(__dirname, "../../../keys");
+const receiptService = require("../receiptService");
 
 describe("receiptService", () => {
-  let createSignedReceipt, verifyReceipt;
-
   beforeAll(() => {
-    // Ensure keys exist
     expect(fs.existsSync(path.join(keysDir, "private.pem"))).toBe(true);
     expect(fs.existsSync(path.join(keysDir, "public.pem"))).toBe(true);
+  });
 
-    const receiptService = require("../receiptService");
-    createSignedReceipt = receiptService.createSignedReceipt;
-    verifyReceipt = receiptService.verifyReceipt;
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetActiveSigningKey.mockResolvedValue(null);
+    mockGetPublicKeyForVersion.mockResolvedValue(null);
+    mockGetKeyStatus.mockResolvedValue({
+      activeKeyVersion: 1,
+      availableKeyVersions: [1],
+      keyRotationEnabled: false,
+      keyStoreReady: false,
+      keys: [],
+    });
   });
 
   const samplePayload = {
@@ -28,49 +46,70 @@ describe("receiptService", () => {
     last4: "4242",
   };
 
-  test("createSignedReceipt trả về JWS string có 3 phần", () => {
-    const jws = createSignedReceipt(samplePayload);
-    expect(typeof jws).toBe("string");
-    const parts = jws.split(".");
-    expect(parts).toHaveLength(3);
-    // Each part should be non-empty base64url
-    parts.forEach((part) => {
-      expect(part.length).toBeGreaterThan(0);
+  test("creates a three-part JWS with legacy key version 1", async () => {
+    const jws = await receiptService.createSignedReceipt(samplePayload);
+    expect(jws.split(".")).toHaveLength(3);
+
+    const decoded = await receiptService.verifyReceipt(jws);
+    expect(decoded).toMatchObject({
+      type: "payment_receipt",
+      key_version: 1,
+      txId: samplePayload.txId,
+      orderId: samplePayload.orderId,
+      userId: samplePayload.userId,
+      amount: samplePayload.amount,
+      currency: samplePayload.currency,
+      last4: samplePayload.last4,
     });
-  });
-
-  test("verifyReceipt trả về payload có type = payment_receipt", () => {
-    const jws = createSignedReceipt(samplePayload);
-    const decoded = verifyReceipt(jws);
-    expect(decoded.type).toBe("payment_receipt");
-    expect(decoded.txId).toBe(samplePayload.txId);
-    expect(decoded.orderId).toBe(samplePayload.orderId);
-    expect(decoded.userId).toBe(samplePayload.userId);
-    expect(decoded.amount).toBe(samplePayload.amount);
-    expect(decoded.currency).toBe(samplePayload.currency);
-    expect(decoded.last4).toBe(samplePayload.last4);
-    expect(decoded.issuedAt).toBeDefined();
-    expect(decoded.iss).toBe("payment-system");
-    expect(decoded.aud).toBe("payment-receipt");
-  });
-
-  test("sửa 1 ký tự receipt → verify throw error", () => {
-    const jws = createSignedReceipt(samplePayload);
-    // Tamper with the payload part (change amount in the base64url-encoded payload)
-    const parts = jws.split(".");
-    // Decode payload, modify it, re-encode
-    const payloadJson = Buffer.from(parts[1], "base64url").toString("utf8");
-    const payload = JSON.parse(payloadJson);
-    payload.amount = 999999; // tamper the amount
-    const tamperedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
-    const tamperedJws = `${parts[0]}.${tamperedPayload}.${parts[2]}`;
-    expect(() => verifyReceipt(tamperedJws)).toThrow();
-  });
-
-  test("receipt không có expiresIn — không hết hạn", () => {
-    const jws = createSignedReceipt(samplePayload);
-    const decoded = verifyReceipt(jws);
-    // Receipt should NOT have exp field (no expiry)
     expect(decoded.exp).toBeUndefined();
+  });
+
+  test("keeps old receipts without key_version verifiable after rotation support", async () => {
+    const privateKey = fs.readFileSync(path.join(keysDir, "private.pem"));
+    const legacyReceipt = jwt.sign(
+      { type: "payment_receipt", ...samplePayload },
+      privateKey,
+      {
+        algorithm: "RS256",
+        issuer: "payment-system",
+        audience: "payment-receipt",
+      },
+    );
+
+    const decoded = await receiptService.verifyReceipt(legacyReceipt);
+    expect(decoded.txId).toBe(samplePayload.txId);
+    expect(decoded.key_version).toBeUndefined();
+  });
+
+  test("uses stored public key selected by key_version after rotation", async () => {
+    const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      publicKeyEncoding: { type: "spki", format: "pem" },
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+    });
+    mockGetActiveSigningKey.mockResolvedValueOnce({
+      keyVersion: 2,
+      privateKey,
+      publicKey,
+    });
+    mockGetPublicKeyForVersion.mockImplementation(async (version) =>
+      version === 2 ? publicKey : null,
+    );
+
+    const jws = await receiptService.createSignedReceipt(samplePayload);
+    const decoded = await receiptService.verifyReceipt(jws);
+
+    expect(decoded.key_version).toBe(2);
+    expect(jwt.decode(jws, { complete: true }).header.kid).toBe("2");
+  });
+
+  test("rejects a tampered receipt", async () => {
+    const jws = await receiptService.createSignedReceipt(samplePayload);
+    const parts = jws.split(".");
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+    payload.amount = 999999;
+    parts[1] = Buffer.from(JSON.stringify(payload)).toString("base64url");
+
+    await expect(receiptService.verifyReceipt(parts.join("."))).rejects.toThrow();
   });
 });

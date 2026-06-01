@@ -1,7 +1,7 @@
 "use strict";
 
 const auditService = require("../transactions/auditService");
-const { isReceiptSigningEnabled } = require("../crypto/receiptService");
+const { getReceiptSigningStatus } = require("../crypto/receiptService");
 
 const EVIDENCE_EVENT_TYPES = Object.freeze([
   "user_register",
@@ -15,20 +15,24 @@ const EVIDENCE_EVENT_TYPES = Object.freeze([
   "provider_refund_succeeded",
   "provider_refund_failed",
   "admin_rejected_refund",
+  "receipt_signing_key_rotated",
 ]);
 
 async function getSecurityEvidence() {
-  const [auditChain, latestEvidenceTimestamps] = await Promise.all([
+  const [auditChain, latestEvidenceTimestamps, receiptSigningStatus] = await Promise.all([
     auditService.verifyAuditChain(),
     auditService.getLatestEvidenceTimestamps(EVIDENCE_EVENT_TYPES),
+    getReceiptSigningStatus(),
   ]);
-  const receiptSigningEnabled = isReceiptSigningEnabled();
 
   return {
-    receiptSigningEnabled,
+    ...receiptSigningStatus,
     receiptSigning: {
-      enabled: receiptSigningEnabled,
+      enabled: receiptSigningStatus.receiptSigningEnabled,
       algorithm: "RS256",
+      currentKeyVersion: receiptSigningStatus.currentKeyVersion,
+      keyRotationEnabled: receiptSigningStatus.keyRotationEnabled,
+      availableKeyVersions: receiptSigningStatus.availableKeyVersions,
     },
     auditChain: {
       enabled: true,

@@ -10,6 +10,8 @@ jest.mock("../../gateway/authzMiddleware", () => ({
 }));
 jest.mock("../securityController", () => ({
   getEvidence: jest.fn(),
+  getReceiptSigningKeyStatus: jest.fn(),
+  rotateReceiptSigningKey: jest.fn(),
   verifyAuditChain: jest.fn(),
   verifyReceipt: jest.fn(),
 }));
@@ -28,6 +30,8 @@ describe("securityRoutes", () => {
     expect(routes).toEqual([
       "get /audit-chain/verify",
       "get /evidence",
+      "get /keys/status",
+      "post /keys/rotate",
       "post /receipt/verify",
     ]);
   });

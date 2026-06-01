@@ -2,6 +2,7 @@
 
 const auditService = require("../transactions/auditService");
 const { verifyReceipt: verifySignedReceipt } = require("../crypto");
+const signingKeyService = require("../crypto/receiptSigningKeyService");
 const securityEvidenceService = require("./securityEvidenceService");
 
 async function verifyAuditChain(req, res) {
@@ -38,7 +39,7 @@ async function verifyReceipt(req, res) {
       return res.status(400).json({ valid: false, error: "Invalid receipt" });
     }
 
-    const payload = verifySignedReceipt(receipt);
+    const payload = await verifySignedReceipt(receipt);
     await auditService.log({
       eventType: "receipt_verified",
       actorUserId: req.user.userId,
@@ -61,8 +62,37 @@ async function verifyReceipt(req, res) {
   }
 }
 
+async function getReceiptSigningKeyStatus(req, res) {
+  try {
+    const status = await signingKeyService.getKeyStatus();
+    return res.status(200).json(status);
+  } catch {
+    return res.status(500).json({ error: "Failed to get receipt signing key status" });
+  }
+}
+
+async function rotateReceiptSigningKey(req, res) {
+  try {
+    const status = await signingKeyService.rotateSigningKey();
+    await auditService.log({
+      eventType: "receipt_signing_key_rotated",
+      actorUserId: req.user.userId,
+      targetType: "receipt_signing_key",
+      targetId: String(status.activeKeyVersion),
+      metadata: { keyVersion: status.activeKeyVersion },
+      ipAddress: req.ip,
+    });
+
+    return res.status(200).json(status);
+  } catch {
+    return res.status(500).json({ error: "Failed to rotate receipt signing key" });
+  }
+}
+
 module.exports = {
   getEvidence,
+  getReceiptSigningKeyStatus,
+  rotateReceiptSigningKey,
   verifyAuditChain,
   verifyReceipt,
 };

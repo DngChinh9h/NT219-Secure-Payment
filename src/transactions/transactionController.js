@@ -90,7 +90,7 @@ async function verifyReceipt(req, res) {
       });
     }
 
-    const payload = verifySignedReceipt(receipt);
+    const payload = await verifySignedReceipt(receipt);
     await auditService.log({
       eventType: "receipt_verified",
       actorUserId: payload.userId || null,

@@ -7,9 +7,9 @@ jest.mock("../../transactions/auditService", () => ({
   getLatestEvidenceTimestamps: mockGetLatestEvidenceTimestamps,
 }));
 
-const mockIsReceiptSigningEnabled = jest.fn();
+const mockGetReceiptSigningStatus = jest.fn();
 jest.mock("../../crypto/receiptService", () => ({
-  isReceiptSigningEnabled: mockIsReceiptSigningEnabled,
+  getReceiptSigningStatus: mockGetReceiptSigningStatus,
 }));
 
 const service = require("../securityEvidenceService");
@@ -20,7 +20,12 @@ describe("securityEvidenceService", () => {
   });
 
   test("returns real security evidence values without secrets", async () => {
-    mockIsReceiptSigningEnabled.mockReturnValueOnce(true);
+    mockGetReceiptSigningStatus.mockResolvedValueOnce({
+      receiptSigningEnabled: true,
+      currentKeyVersion: 2,
+      keyRotationEnabled: true,
+      availableKeyVersions: [1, 2],
+    });
     mockVerifyAuditChain.mockResolvedValueOnce({
       valid: true,
       checked: 12,
@@ -35,7 +40,14 @@ describe("securityEvidenceService", () => {
 
     expect(evidence).toMatchObject({
       receiptSigningEnabled: true,
-      receiptSigning: { enabled: true, algorithm: "RS256" },
+      currentKeyVersion: 2,
+      keyRotationEnabled: true,
+      availableKeyVersions: [1, 2],
+      receiptSigning: {
+        enabled: true,
+        algorithm: "RS256",
+        currentKeyVersion: 2,
+      },
       auditChain: {
         enabled: true,
         algorithm: "SHA-256",

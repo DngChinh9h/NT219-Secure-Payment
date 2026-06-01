@@ -183,7 +183,7 @@ async function attachSecurityArtifactsToTransaction({
   }
 
   if (!jws) {
-    jws = createSignedReceipt({
+    jws = await createSignedReceipt({
       txId: tx.id,
       orderId: order.id,
       userId: order.user_id,
