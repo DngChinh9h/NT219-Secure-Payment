@@ -51,6 +51,9 @@ describe("mockBankProvider", () => {
     ["success", "succeeded", null],
     ["failed", "failed", "MockBank refund failed"],
     ["pending", "pending", null],
+    ["mock_refund_success", "succeeded", null],
+    ["mock_refund_failed", "failed", "MockBank refund failed"],
+    ["mock_refund_pending", "pending", null],
   ])(
     "refundPayment maps %s outcome to %s",
     async (mockRefundOutcome, expectedStatus, providerError) => {

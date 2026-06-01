@@ -356,6 +356,32 @@ function getProviderPaymentIdForTransaction(tx) {
   return tx.provider_payment_id || tx.stripe_payment_id;
 }
 
+function getRefundProviderTimeoutMs() {
+  const timeoutMs = Number(process.env.REFUND_PROVIDER_TIMEOUT_MS);
+  return Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 15000;
+}
+
+async function refundWithTimeout(providerModule, args) {
+  const timeoutMs = getRefundProviderTimeoutMs();
+  let timeout;
+
+  try {
+    return await Promise.race([
+      providerModule.refundPayment(args),
+      new Promise((resolve, reject) => {
+        timeout = setTimeout(() => {
+          const err = new Error(`Refund provider timed out after ${timeoutMs}ms`);
+          err.statusCode = 504;
+          reject(err);
+        }, timeoutMs);
+        timeout.unref?.();
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function persistSuccessfulRefund({
   transactionId,
   refundId,
@@ -450,7 +476,7 @@ async function refundTransaction({
   const providerModule = getProvider(providerName);
   const providerPaymentId = getProviderPaymentIdForTransaction(tx);
 
-  const refund = await providerModule.refundPayment({
+  const refund = await refundWithTimeout(providerModule, {
     providerPaymentId,
     amount: tx.amount,
     reason,

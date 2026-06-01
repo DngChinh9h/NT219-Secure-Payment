@@ -226,6 +226,11 @@ describe("paymentService refund flow", () => {
     jest.clearAllMocks();
   });
 
+  afterEach(() => {
+    delete process.env.REFUND_PROVIDER_TIMEOUT_MS;
+    jest.useRealTimers();
+  });
+
   test("refunds a successful mock_bank transaction", async () => {
     mockQuery.mockResolvedValueOnce({ rowCount: 1, rows: [successTx] });
     mockSuccessfulRefundPersistence({
@@ -440,6 +445,39 @@ describe("paymentService refund flow", () => {
     expect(mockClientQuery).toHaveBeenNthCalledWith(1, "BEGIN");
     expect(mockClientQuery).toHaveBeenNthCalledWith(3, "ROLLBACK");
     expect(mockClientRelease).toHaveBeenCalledTimes(1);
+  });
+
+  test("times out a refund provider that does not respond", async () => {
+    jest.useFakeTimers();
+    process.env.REFUND_PROVIDER_TIMEOUT_MS = "5";
+    mockQuery.mockResolvedValueOnce({
+      rowCount: 1,
+      rows: [
+        {
+          ...successTx,
+          provider: "stripe",
+          provider_payment_id: "pi_timeout",
+          stripe_payment_id: "pi_timeout",
+        },
+      ],
+    });
+    mockRefundsCreate.mockReturnValueOnce(new Promise(() => {}));
+
+    const refundPromise = refundTransaction({
+      transactionId,
+      reason: "requested_by_customer",
+      userId,
+      role: "admin",
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    jest.advanceTimersByTime(5);
+
+    await expect(refundPromise).rejects.toMatchObject({
+      message: "Refund provider timed out after 5ms",
+      statusCode: 504,
+    });
+
   });
 });
 

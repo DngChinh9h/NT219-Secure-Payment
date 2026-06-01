@@ -44,6 +44,8 @@ describe("refundRequestService customer workflow", () => {
       transaction_id: transactionId,
       user_id: userId,
       status: "pending_review",
+      admin_decision: "pending",
+      provider_status: "not_started",
     };
     mockQuery
       .mockResolvedValueOnce({ rowCount: 1, rows: [order] })
@@ -60,6 +62,8 @@ describe("refundRequestService customer workflow", () => {
 
     expect(result).toEqual(refundRequest);
     expect(mockQuery.mock.calls[3][0]).toContain("pending_review");
+    expect(mockQuery.mock.calls[3][0]).toContain("admin_decision");
+    expect(mockQuery.mock.calls[3][0]).toContain("provider_status");
     expect(mockRefundTransaction).not.toHaveBeenCalled();
   });
 
@@ -196,7 +200,13 @@ describe("refundRequestService admin workflow", () => {
   });
 
   test("admin rejects pending request with note", async () => {
-    const rejected = { ...pendingRequest, status: "rejected", admin_note: "Denied" };
+    const rejected = {
+      ...pendingRequest,
+      status: "rejected",
+      admin_decision: "rejected",
+      provider_status: "not_started",
+      admin_note: "Denied",
+    };
     mockQuery.mockResolvedValueOnce({ rowCount: 1, rows: [rejected] });
 
     await expect(
@@ -218,6 +228,8 @@ describe("refundRequestService admin workflow", () => {
     const succeeded = {
       ...processing,
       status: "succeeded",
+      admin_decision: "approved",
+      provider_status: "succeeded",
       provider_refund_id: "mock_re_1",
     };
     mockQuery
@@ -249,6 +261,8 @@ describe("refundRequestService admin workflow", () => {
     const processing = { ...pendingRequest, status: "approved_processing" };
     const stillProcessing = {
       ...processing,
+      admin_decision: "approved",
+      provider_status: "pending",
       provider_refund_id: "mock_re_pending",
       provider_error: null,
     };
@@ -274,6 +288,7 @@ describe("refundRequestService admin workflow", () => {
       "approved_processing",
       "mock_re_pending",
       null,
+      "pending",
     ]);
   });
 
@@ -282,6 +297,8 @@ describe("refundRequestService admin workflow", () => {
     const providerFailed = {
       ...processing,
       status: "provider_failed",
+      admin_decision: "approved",
+      provider_status: "failed",
       provider_refund_id: "mock_re_failed",
       provider_error: "MockBank refund failed",
     };
@@ -308,6 +325,7 @@ describe("refundRequestService admin workflow", () => {
       "provider_failed",
       "mock_re_failed",
       "MockBank refund failed",
+      "failed",
     ]);
   });
 

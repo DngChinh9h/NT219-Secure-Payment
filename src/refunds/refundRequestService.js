@@ -95,8 +95,10 @@ async function createRefundRequest({ orderId, reason, details = null, userId }) 
     const insertResult = await db.query(
       `INSERT INTO refund_requests
         (order_id, transaction_id, user_id, amount, provider,
-         provider_payment_id, reason, details, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending_review')
+         provider_payment_id, reason, details, status, admin_decision,
+         provider_status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending_review',
+               'pending', 'not_started')
        RETURNING *`,
       [
         order.id,
@@ -152,6 +154,7 @@ async function cancelRefundRequest({ requestId, userId }) {
   const result = await db.query(
     `UPDATE refund_requests
      SET status = 'cancelled',
+         provider_status = 'not_started',
          updated_at = NOW()
      WHERE id = $1
        AND status = 'pending_review'
@@ -188,6 +191,8 @@ async function rejectRefundRequest({ requestId, adminNote, adminUserId }) {
   const result = await db.query(
     `UPDATE refund_requests
      SET status = 'rejected',
+         admin_decision = 'rejected',
+         provider_status = 'not_started',
          admin_note = $2,
          reviewed_by = $3,
          reviewed_at = NOW(),
@@ -221,6 +226,8 @@ async function approveRefundRequest({
   const claimResult = await db.query(
     `UPDATE refund_requests
      SET status = 'approved_processing',
+         admin_decision = 'approved',
+         provider_status = 'processing',
          reviewed_by = $2,
          reviewed_at = NOW(),
          updated_at = NOW()
@@ -272,10 +279,17 @@ async function approveRefundRequest({
        SET status = $2,
            provider_refund_id = $3,
            provider_error = $4,
+           provider_status = $5,
            updated_at = NOW()
        WHERE id = $1
        RETURNING *`,
-      [requestId, requestStatus, refundResult.refundId, providerError],
+      [
+        requestId,
+        requestStatus,
+        refundResult.refundId,
+        providerError,
+        refundResult.providerStatus,
+      ],
     );
 
     return {
@@ -288,6 +302,7 @@ async function approveRefundRequest({
       .query(
         `UPDATE refund_requests
          SET status = 'provider_failed',
+             provider_status = 'failed',
              provider_error = $2,
              updated_at = NOW()
          WHERE id = $1`,

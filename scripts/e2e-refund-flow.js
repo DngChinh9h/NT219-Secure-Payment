@@ -13,7 +13,7 @@ const CUSTOMER_EMAIL =
   `e2e_customer_${Date.now()}@example.com`;
 const CUSTOMER_PASSWORD =
   process.env.E2E_CUSTOMER_PASSWORD || "Password123!";
-const TEST_STRIPE_REFUND = process.env.E2E_TEST_STRIPE_REFUND === "true";
+const TEST_STRIPE_REFUND = process.env.E2E_TEST_STRIPE_REFUND !== "false";
 const ORDER_TOTAL = 3680000;
 
 const summary = [];
@@ -282,12 +282,15 @@ async function adminApproveRefundRequest(
   adminToken,
   refundRequestId,
   expectedStatus = 200,
+  mockRefundOutcome,
 ) {
   return request(
     "POST",
     `/api/admin/refund-requests/${refundRequestId}/approve`,
     {
       token: adminToken,
+      body:
+        mockRefundOutcome === undefined ? undefined : { mockRefundOutcome },
       expectedStatus,
     },
   );
@@ -336,6 +339,12 @@ async function runStripeRefundFlow(customerToken, adminToken) {
     approval.body,
   );
   assert(
+    approval.body.refundRequest.admin_decision === "approved" &&
+      approval.body.refundRequest.provider_status === "succeeded",
+    "Stripe refund response does not separate admin and provider status",
+    approval.body,
+  );
+  assert(
     approval.body.refundRequest.provider_refund_id?.startsWith("re_"),
     "Stripe refund request is missing a Stripe re_ refund id",
     approval.body,
@@ -358,6 +367,61 @@ async function runStripeRefundFlow(customerToken, adminToken) {
     "Stripe refund did not mark order refunded",
     refundedOrder,
   );
+}
+
+async function runMockRefundOutcomeFlow(
+  customerToken,
+  adminToken,
+  outcome,
+  expectedRequestStatus,
+  expectedProviderStatus,
+) {
+  const order = await createPaidOrder(customerToken, `refund-${outcome}`);
+  const refundRequest = await createRefundRequest(
+    customerToken,
+    order.id,
+    "requested_by_customer",
+    `E2E MockBank ${outcome} refund request`,
+  );
+  const refundRequestId = refundRequest.body?.refundRequest?.id;
+  assert(refundRequestId, `MockBank ${outcome} refund request is missing id`);
+
+  const approval = await adminApproveRefundRequest(
+    adminToken,
+    refundRequestId,
+    200,
+    outcome,
+  );
+  const finalRequest = approval.body?.refundRequest;
+  assert(
+    finalRequest?.status === expectedRequestStatus,
+    `MockBank ${outcome} returned unexpected request status`,
+    approval.body,
+  );
+  assert(
+    finalRequest.admin_decision === "approved" &&
+      finalRequest.provider_status === expectedProviderStatus,
+    `MockBank ${outcome} response does not separate admin and provider status`,
+    approval.body,
+  );
+
+  const transactions = await getTransactionsMine(customerToken);
+  const transaction = transactions.find(
+    (candidate) => candidate.order_id === order.id,
+  );
+  const orders = await getOrdersMine(customerToken);
+  const finalOrder = orders.find((candidate) => candidate.id === order.id);
+
+  assert(transaction, `MockBank ${outcome} transaction is missing`);
+  assert(finalOrder, `MockBank ${outcome} order is missing`);
+
+  if (expectedProviderStatus === "succeeded") {
+    assert(transaction.status === "refunded", "Successful refund did not update transaction");
+    assert(finalOrder.status === "refunded", "Successful refund did not update order");
+  } else {
+    assert(transaction.status === "success", `${outcome} refund changed transaction status`);
+    assert(finalOrder.status === "paid", `${outcome} refund changed order status`);
+  }
 }
 
 async function run() {
@@ -410,6 +474,12 @@ async function run() {
     "Expected pending_review refund request",
     rejectedRequest,
   );
+  assert(
+    rejectedRequest.admin_decision === "pending" &&
+      rejectedRequest.provider_status === "not_started",
+    "New refund request does not expose separate admin and provider status",
+    rejectedRequest,
+  );
   pass("create refund request");
 
   await createRefundRequest(
@@ -453,6 +523,12 @@ async function run() {
   );
   assert(rejection.body?.refundRequest?.status === "rejected", "Admin reject failed");
   assert(
+    rejection.body.refundRequest.admin_decision === "rejected" &&
+      rejection.body.refundRequest.provider_status === "not_started",
+    "Rejected refund request does not expose separate admin and provider status",
+    rejection.body,
+  );
+  assert(
     rejection.body.refundRequest.admin_note ||
       rejection.body.refundRequest.adminNote,
     "Admin rejection response is missing admin note",
@@ -490,6 +566,12 @@ async function run() {
     "Default MockBank admin approval did not succeed",
     approval.body,
   );
+  assert(
+    finalRequest.admin_decision === "approved" &&
+      finalRequest.provider_status === "succeeded",
+    "Default MockBank response does not separate admin and provider status",
+    approval.body,
+  );
 
   assert(
     finalRequest.provider_refund_id ||
@@ -513,6 +595,24 @@ async function run() {
 
   await adminApproveRefundRequest(adminToken, approvedRequestId, [400, 409]);
   pass("duplicate approve blocked");
+
+  await runMockRefundOutcomeFlow(
+    customerToken,
+    adminToken,
+    "pending",
+    "approved_processing",
+    "pending",
+  );
+  pass("mock refund pending");
+
+  await runMockRefundOutcomeFlow(
+    customerToken,
+    adminToken,
+    "failed",
+    "provider_failed",
+    "failed",
+  );
+  pass("mock refund failed");
 
   const unpaidOrder = await createOrder(customerToken, "unpaid");
   const unpaidAttempt = await createRefundRequest(
@@ -569,6 +669,7 @@ module.exports = {
   payOrderStripeTest,
   registerCustomer,
   request,
+  runMockRefundOutcomeFlow,
   runStripeRefundFlow,
   syncPayment,
 };

@@ -107,6 +107,8 @@ CREATE TABLE IF NOT EXISTS refund_requests (
       'succeeded',
       'provider_failed'
     )),
+  admin_decision VARCHAR(50),
+  provider_status VARCHAR(50),
   admin_note TEXT,
   provider_refund_id VARCHAR(255),
   provider_error TEXT,
@@ -139,6 +141,8 @@ ALTER TABLE transactions ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMP;
 ALTER TABLE transactions ADD COLUMN IF NOT EXISTS refund_reason TEXT;
 ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS previous_hash TEXT;
 ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS current_hash TEXT;
+ALTER TABLE refund_requests ADD COLUMN IF NOT EXISTS admin_decision VARCHAR(50);
+ALTER TABLE refund_requests ADD COLUMN IF NOT EXISTS provider_status VARCHAR(50);
 
 -- Indexes (CREATE INDEX IF NOT EXISTS)
 CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
