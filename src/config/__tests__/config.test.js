@@ -124,6 +124,14 @@ describe("CORS config", () => {
     });
   });
 
+  test("allows non-browser requests without an Origin header", (done) => {
+    createCorsOptions().origin(undefined, (err, allowed) => {
+      expect(err).toBeNull();
+      expect(allowed).toBe(true);
+      done();
+    });
+  });
+
   test("supports comma-separated CORS_ORIGINS and FRONTEND_ORIGIN", () => {
     process.env.CORS_ORIGINS =
       "https://frontend-one.vercel.app, https://frontend-two.vercel.app";
@@ -148,5 +156,29 @@ describe("CORS config", () => {
       expect(err.statusCode).toBe(403);
       done();
     });
+  });
+
+  test("never treats wildcard CORS_ORIGINS as an allowed browser origin", (done) => {
+    process.env.NODE_ENV = "production";
+    process.env.CORS_ORIGINS = "*";
+
+    expect(getAllowedOrigins()).toEqual([]);
+
+    createCorsOptions().origin("https://frontend.example", (err) => {
+      expect(err).toBeInstanceOf(Error);
+      expect(err.statusCode).toBe(403);
+      done();
+    });
+  });
+
+  test("production allows explicitly configured Vercel and local origins", () => {
+    process.env.NODE_ENV = "production";
+    process.env.CORS_ORIGINS =
+      "https://frontend.vercel.app,http://localhost:5173";
+
+    expect(getAllowedOrigins()).toEqual([
+      "https://frontend.vercel.app",
+      "http://localhost:5173",
+    ]);
   });
 });

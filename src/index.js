@@ -1,5 +1,20 @@
 "use strict";
 require("dotenv").config();
+const { validateStartupConfig } = require("./config/envValidation");
+
+let startupConfigValidated = false;
+
+function ensureStartupConfig() {
+  if (!startupConfigValidated) {
+    validateStartupConfig();
+    startupConfigValidated = true;
+  }
+}
+
+if (require.main === module) {
+  ensureStartupConfig();
+}
+
 const express = require("express");
 const cors = require("cors");
 const { createCorsOptions } = require("./config/corsConfig");
@@ -9,6 +24,7 @@ const {
 } = require("./gateway/securityHeaders");
 const app = express();
 const { generalLimiter } = require("./gateway/rateLimiter");
+const { getLiveness } = require("./health/healthController");
 
 const configuredTrustProxyHops = Number(process.env.TRUST_PROXY_HOPS);
 if (Number.isInteger(configuredTrustProxyHops) && configuredTrustProxyHops > 0) {
@@ -45,6 +61,7 @@ app.get("/", (req, res) => {
 
 app.use("/api/auth", require("./auth/authRoutes"));
 app.use("/api/config", require("./config/configRoutes"));
+app.use("/api/health", require("./health/healthRoutes"));
 app.use("/api/orders", require("./orders/orderRoutes"));
 app.use("/api/payments", require("./payments/paymentRoutes"));
 app.use("/api/refund-requests", require("./refunds/refundRequestRoutes"));
@@ -52,18 +69,28 @@ app.use("/api/admin/security", require("./security/securityRoutes"));
 app.use("/api/admin", require("./refunds/adminRefundRequestRoutes"));
 app.use("/api/transactions", require("./transactions/transactionRoutes"));
 
-app.get("/health", (req, res) => res.json({ status: "ok", time: new Date() }));
+app.get("/health", getLiveness);
 
 app.use((req, res) => res.status(404).json({ error: "Route not found" }));
 
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(err.statusCode || 500).json({
+  const status = err.statusCode || 500;
+  if (status >= 500) console.error(err.stack);
+  res.status(status).json({
     error: err.statusCode ? err.message : "Internal server error",
   });
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+function startServer() {
+  ensureStartupConfig();
+  return app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+}
+
+if (require.main === module) {
+  startServer();
+}
 
 module.exports = app;
+module.exports.startServer = startServer;

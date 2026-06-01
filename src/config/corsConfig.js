@@ -12,7 +12,7 @@ function getAllowedOrigins() {
     process.env.FRONTEND_ORIGIN || "",
   ]
     .map((origin) => origin.trim())
-    .filter(Boolean);
+    .filter((origin) => origin && origin !== "*");
 
   return [
     ...new Set([

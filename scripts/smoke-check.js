@@ -47,3 +47,17 @@ check("security hardening service import", () => {
     throw new Error("getSecurityHardeningEvidence missing");
   }
 });
+
+check("runtime config validator import", () => {
+  const { getRuntimeConfigStatus } = require("../src/config/envValidation");
+  if (typeof getRuntimeConfigStatus !== "function") {
+    throw new Error("getRuntimeConfigStatus missing");
+  }
+});
+
+check("health readiness service import", () => {
+  const { checkReadiness } = require("../src/health/healthService");
+  if (typeof checkReadiness !== "function") {
+    throw new Error("checkReadiness missing");
+  }
+});
