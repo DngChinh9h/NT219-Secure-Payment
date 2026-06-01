@@ -107,6 +107,7 @@ describe("CORS config", () => {
 
   beforeEach(() => {
     process.env = { ...originalEnv };
+    process.env.NODE_ENV = "test";
     delete process.env.CORS_ORIGINS;
     delete process.env.FRONTEND_ORIGIN;
   });
@@ -134,5 +135,18 @@ describe("CORS config", () => {
       "https://frontend-two.vercel.app",
       "https://legacy-frontend.example",
     ]);
+  });
+
+  test("production excludes implicit localhost and rejects unknown origins", (done) => {
+    process.env.NODE_ENV = "production";
+    process.env.CORS_ORIGINS = "https://frontend.example";
+
+    expect(getAllowedOrigins()).toEqual(["https://frontend.example"]);
+
+    createCorsOptions().origin("https://attacker.example", (err) => {
+      expect(err).toBeInstanceOf(Error);
+      expect(err.statusCode).toBe(403);
+      done();
+    });
   });
 });

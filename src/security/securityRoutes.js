@@ -11,6 +11,7 @@ router.use(authenticate, requireAdmin);
 
 router.get("/audit-chain/verify", controller.verifyAuditChain);
 router.get("/evidence", controller.getEvidence);
+router.get("/hardening", controller.getHardening);
 router.get("/keys/status", controller.getReceiptSigningKeyStatus);
 router.post("/keys/rotate", controller.rotateReceiptSigningKey);
 router.post("/receipt/verify", controller.verifyReceipt);

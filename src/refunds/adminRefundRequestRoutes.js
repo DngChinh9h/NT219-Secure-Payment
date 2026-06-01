@@ -11,6 +11,7 @@ const {
   refundRequestIdSchema,
 } = require("../crypto");
 const controller = require("./refundRequestController");
+const { adminRefundLimiter } = require("../gateway/rateLimiter");
 
 const router = express.Router();
 
@@ -19,12 +20,14 @@ router.use(authenticate, requireAdmin);
 router.get("/refund-requests", controller.getAllRefundRequests);
 router.post(
   "/refund-requests/:id/reject",
+  adminRefundLimiter,
   validateParams(refundRequestIdSchema),
   validate(refundRequestRejectSchema),
   controller.rejectRefundRequest,
 );
 router.post(
   "/refund-requests/:id/approve",
+  adminRefundLimiter,
   validateParams(refundRequestIdSchema),
   validate(refundRequestApproveSchema),
   controller.approveRefundRequest,

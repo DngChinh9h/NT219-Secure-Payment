@@ -28,6 +28,7 @@
     "e2e:refund": "node scripts/e2e-refund-flow.js",
     "e2e:security": "node scripts/e2e-security-evidence.js",
     "e2e:key-rotation": "node scripts/e2e-key-rotation.js",
+    "e2e:hardening": "node scripts/e2e-hardening.js",
     "start:prod": "node src/db/migrateDeploy.js && node src/index.js",
     "smoke": "node scripts/smoke-check.js"
   },
@@ -38,6 +39,7 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.2",
+    "helmet": "^8.2.0",
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.21.0",
     "stripe": "^22.1.1",

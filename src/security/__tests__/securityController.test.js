@@ -17,6 +17,11 @@ jest.mock("../securityEvidenceService", () => ({
   getSecurityEvidence: mockGetSecurityEvidence,
 }));
 
+const mockGetSecurityHardeningEvidence = jest.fn();
+jest.mock("../securityHardeningService", () => ({
+  getSecurityHardeningEvidence: mockGetSecurityHardeningEvidence,
+}));
+
 const mockGetKeyStatus = jest.fn();
 const mockRotateSigningKey = jest.fn();
 jest.mock("../../crypto/receiptSigningKeyService", () => ({
@@ -69,6 +74,21 @@ describe("securityController", () => {
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(evidence);
     expect(JSON.stringify(res.json.mock.calls[0][0])).not.toMatch(/secret|private/i);
+  });
+
+  test("returns security hardening evidence", () => {
+    const evidence = {
+      rateLimitEnabled: true,
+      corsRestricted: true,
+      securityHeadersEnabled: true,
+    };
+    mockGetSecurityHardeningEvidence.mockReturnValueOnce(evidence);
+    const res = mockResponse();
+
+    controller.getHardening({}, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(evidence);
   });
 
   test("admin receipt verification returns signed payload", async () => {

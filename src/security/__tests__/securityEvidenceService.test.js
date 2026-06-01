@@ -12,6 +12,11 @@ jest.mock("../../crypto/receiptService", () => ({
   getReceiptSigningStatus: mockGetReceiptSigningStatus,
 }));
 
+const mockGetSecurityHardeningEvidence = jest.fn();
+jest.mock("../securityHardeningService", () => ({
+  getSecurityHardeningEvidence: mockGetSecurityHardeningEvidence,
+}));
+
 const service = require("../securityEvidenceService");
 
 describe("securityEvidenceService", () => {
@@ -25,6 +30,11 @@ describe("securityEvidenceService", () => {
       currentKeyVersion: 2,
       keyRotationEnabled: true,
       availableKeyVersions: [1, 2],
+    });
+    mockGetSecurityHardeningEvidence.mockReturnValueOnce({
+      rateLimitEnabled: true,
+      corsRestricted: true,
+      securityHeadersEnabled: true,
     });
     mockVerifyAuditChain.mockResolvedValueOnce({
       valid: true,
@@ -64,6 +74,11 @@ describe("securityEvidenceService", () => {
         providers: ["stripe", "mock_bank"],
       },
       providerRefundEnabled: true,
+      hardening: {
+        rateLimitEnabled: true,
+        corsRestricted: true,
+        securityHeadersEnabled: true,
+      },
     });
 
     const serialized = JSON.stringify(evidence);

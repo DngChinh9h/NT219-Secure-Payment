@@ -9,12 +9,18 @@ const {
   refundRequestIdSchema,
 } = require("../crypto");
 const controller = require("./refundRequestController");
+const { refundRequestLimiter } = require("../gateway/rateLimiter");
 
 const router = express.Router();
 
 router.use(authenticate);
 
-router.post("/", validate(refundRequestSchema), controller.createRefundRequest);
+router.post(
+  "/",
+  refundRequestLimiter,
+  validate(refundRequestSchema),
+  controller.createRefundRequest,
+);
 router.get("/mine", controller.getMyRefundRequests);
 router.post(
   "/:id/cancel",

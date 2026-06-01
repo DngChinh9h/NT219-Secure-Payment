@@ -79,6 +79,7 @@ describe("securityRoutes HTTP authorization", () => {
         `${baseUrl}/api/admin/security/audit-chain/verify`,
       );
       const keys = await fetch(`${baseUrl}/api/admin/security/keys/status`);
+      const hardening = await fetch(`${baseUrl}/api/admin/security/hardening`);
       const rotate = await fetch(`${baseUrl}/api/admin/security/keys/rotate`, {
         method: "POST",
       });
@@ -86,6 +87,7 @@ describe("securityRoutes HTTP authorization", () => {
       expect(evidence.status).toBe(401);
       expect(chain.status).toBe(401);
       expect(keys.status).toBe(401);
+      expect(hardening.status).toBe(401);
       expect(rotate.status).toBe(401);
     });
   });
@@ -105,6 +107,9 @@ describe("securityRoutes HTTP authorization", () => {
       const keys = await fetch(`${baseUrl}/api/admin/security/keys/status`, {
         headers,
       });
+      const hardening = await fetch(`${baseUrl}/api/admin/security/hardening`, {
+        headers,
+      });
       const rotate = await fetch(`${baseUrl}/api/admin/security/keys/rotate`, {
         method: "POST",
         headers,
@@ -113,7 +118,30 @@ describe("securityRoutes HTTP authorization", () => {
       expect(evidence.status).toBe(403);
       expect(chain.status).toBe(403);
       expect(keys.status).toBe(403);
+      expect(hardening.status).toBe(403);
       expect(rotate.status).toBe(403);
+    });
+  });
+
+  test("admin receives security hardening evidence", async () => {
+    mockVerifyJWT.mockReturnValue({ userId: "admin_1", role: "admin" });
+
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/admin/security/hardening`, {
+        headers: { Authorization: "Bearer admin-token" },
+      });
+      const evidence = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(evidence).toMatchObject({
+        rateLimitEnabled: true,
+        corsRestricted: true,
+        securityHeadersEnabled: true,
+        replayProtectionEnabled: true,
+        duplicatePaymentProtectionEnabled: true,
+        refundDoubleSpendProtectionEnabled: true,
+        secretScanRecommended: true,
+      });
     });
   });
 

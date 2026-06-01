@@ -3,13 +3,23 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { createCorsOptions } = require("./config/corsConfig");
-const app = express();
 const {
-  generalLimiter,
-  loginLimiter,
-  paymentLimiter,
-} = require("./gateway/rateLimiter");
+  securityHeaders,
+  sensitiveNoStore,
+} = require("./gateway/securityHeaders");
+const app = express();
+const { generalLimiter } = require("./gateway/rateLimiter");
 
+const configuredTrustProxyHops = Number(process.env.TRUST_PROXY_HOPS);
+if (Number.isInteger(configuredTrustProxyHops) && configuredTrustProxyHops > 0) {
+  app.set("trust proxy", configuredTrustProxyHops);
+} else if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
+
+app.disable("x-powered-by");
+app.use(securityHeaders);
+app.use(sensitiveNoStore);
 app.use(cors(createCorsOptions()));
 
 app.post(
@@ -24,8 +34,6 @@ app.use((req, res, next) => {
 });
 
 app.use("/api", generalLimiter);
-app.use("/api/auth/login", loginLimiter);
-app.use("/api/payments", paymentLimiter);
 
 app.get("/", (req, res) => {
   res.json({
@@ -50,7 +58,9 @@ app.use((req, res) => res.status(404).json({ error: "Route not found" }));
 
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ error: "Internal server error" });
+  res.status(err.statusCode || 500).json({
+    error: err.statusCode ? err.message : "Internal server error",
+  });
 });
 
 const PORT = process.env.PORT || 3000;

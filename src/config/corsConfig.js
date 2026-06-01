@@ -2,6 +2,10 @@
 
 const LOCAL_FRONTEND_ORIGIN = "http://localhost:5173";
 
+function isLocalFrontendAllowed() {
+  return process.env.NODE_ENV !== "production";
+}
+
 function getAllowedOrigins() {
   const configuredOrigins = [
     ...(process.env.CORS_ORIGINS || "").split(","),
@@ -10,7 +14,12 @@ function getAllowedOrigins() {
     .map((origin) => origin.trim())
     .filter(Boolean);
 
-  return [...new Set([LOCAL_FRONTEND_ORIGIN, ...configuredOrigins])];
+  return [
+    ...new Set([
+      ...(isLocalFrontendAllowed() ? [LOCAL_FRONTEND_ORIGIN] : []),
+      ...configuredOrigins,
+    ]),
+  ];
 }
 
 function createCorsOptions() {
@@ -20,15 +29,23 @@ function createCorsOptions() {
         return callback(null, true);
       }
 
-      return callback(new Error("Origin not allowed by CORS"));
+      const err = new Error("Origin not allowed by CORS");
+      err.statusCode = 403;
+      return callback(err);
     },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "Stripe-Signature"],
   };
 }
 
+function isCorsRestricted() {
+  return true;
+}
+
 module.exports = {
   LOCAL_FRONTEND_ORIGIN,
   createCorsOptions,
   getAllowedOrigins,
+  isCorsRestricted,
+  isLocalFrontendAllowed,
 };

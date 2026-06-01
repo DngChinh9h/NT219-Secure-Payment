@@ -2,6 +2,7 @@
 
 const auditService = require("../transactions/auditService");
 const { getReceiptSigningStatus } = require("../crypto/receiptService");
+const { getSecurityHardeningEvidence } = require("./securityHardeningService");
 
 const EVIDENCE_EVENT_TYPES = Object.freeze([
   "user_register",
@@ -24,6 +25,7 @@ async function getSecurityEvidence() {
     auditService.getLatestEvidenceTimestamps(EVIDENCE_EVENT_TYPES),
     getReceiptSigningStatus(),
   ]);
+  const hardening = getSecurityHardeningEvidence();
 
   return {
     ...receiptSigningStatus,
@@ -60,6 +62,7 @@ async function getSecurityEvidence() {
       providers: ["stripe", "mock_bank"],
     },
     providerRefundEnabled: true,
+    hardening,
     latestEvidenceTimestamps,
   };
 }

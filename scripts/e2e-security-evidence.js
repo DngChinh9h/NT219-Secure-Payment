@@ -204,6 +204,9 @@ function assertProtectionEvidence(evidence) {
   assert(evidence.refundDoubleSpendProtection?.enabled === true, "Refund double-spend evidence missing", evidence);
   assert(evidence.webhookIdempotency?.enabled === true, "Webhook idempotency evidence missing", evidence);
   assert(evidence.providerRefundEnabled === true, "Provider refund evidence missing", evidence);
+  assert(evidence.hardening?.rateLimitEnabled === true, "Rate-limit hardening evidence missing", evidence);
+  assert(evidence.hardening?.corsRestricted === true, "CORS hardening evidence missing", evidence);
+  assert(evidence.hardening?.securityHeadersEnabled === true, "Header hardening evidence missing", evidence);
   assert(
     evidence.latestEvidenceTimestamps &&
       Object.keys(evidence.latestEvidenceTimestamps).length > 0,

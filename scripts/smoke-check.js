@@ -40,3 +40,10 @@ check("security evidence service import", () => {
     throw new Error("getSecurityEvidence missing");
   }
 });
+
+check("security hardening service import", () => {
+  const { getSecurityHardeningEvidence } = require("../src/security/securityHardeningService");
+  if (typeof getSecurityHardeningEvidence !== "function") {
+    throw new Error("getSecurityHardeningEvidence missing");
+  }
+});
