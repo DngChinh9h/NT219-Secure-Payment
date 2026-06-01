@@ -21,6 +21,19 @@ async function createRefundRequest(req, res) {
 
     return res.status(201).json({ refundRequest: request });
   } catch (err) {
+    if (err.statusCode === 409) {
+      await auditService.log({
+        eventType: "refund_request_blocked",
+        actorUserId: req.user.userId,
+        targetType: "order",
+        targetId: req.body?.orderId || null,
+        ipAddress: req.ip,
+        metadata: {
+          orderId: req.body?.orderId || null,
+          reason: err.message,
+        },
+      });
+    }
     return res.status(err.statusCode || 400).json({ error: err.message });
   }
 }
@@ -133,6 +146,16 @@ async function approveRefundRequest(req, res) {
       refund: result.refund,
     });
   } catch (err) {
+    if (err.statusCode === 409) {
+      await auditService.log({
+        eventType: "refund_approval_blocked",
+        actorUserId: req.user.userId,
+        targetType: "refund_request",
+        targetId: req.params.id,
+        ipAddress: req.ip,
+        metadata: { reason: err.message },
+      });
+    }
     await auditService.log({
       eventType: "provider_refund_failed",
       actorUserId: req.user.userId,

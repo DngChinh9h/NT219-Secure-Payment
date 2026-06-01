@@ -13,6 +13,7 @@ const checks = [
   ["security evidence", "scripts/e2e-security-evidence.js"],
   ["key rotation", "scripts/e2e-key-rotation.js"],
   ["hardening", "scripts/e2e-hardening.js"],
+  ["reconciliation", "scripts/e2e-reconciliation.js"],
 ];
 
 function run() {

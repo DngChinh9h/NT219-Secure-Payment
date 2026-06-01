@@ -49,6 +49,9 @@ RATE_LIMIT_AUTH_MAX=30
 RATE_LIMIT_PAYMENT_MAX=60
 RATE_LIMIT_REFUND_REQUEST_MAX=30
 RATE_LIMIT_ADMIN_REFUND_MAX=60
+RISK_FAILED_PAYMENT_THRESHOLD=3
+RISK_REFUND_REQUEST_THRESHOLD=3
+RISK_HIGH_AMOUNT_THRESHOLD=10000000
 ```
 
 ### Admin Seed
@@ -111,6 +114,13 @@ GET /api/health/readiness
 GET /api/config/public
 ```
 
+Admin security dashboards can read:
+
+```text
+GET /api/admin/security/reconciliation
+GET /api/admin/security/risk-evidence
+```
+
 Run the final black-box suite:
 
 ```powershell
@@ -120,5 +130,6 @@ $env:E2E_ADMIN_PASSWORD="<admin-password>"
 npm run e2e:production
 ```
 
-The suite runs refund, security evidence, signing key rotation, and hardening
-checks. It creates test records and rotates the active receipt signing key.
+The suite runs refund, security evidence, signing key rotation, hardening, and
+reconciliation checks. It creates test records and rotates the active receipt
+signing key.

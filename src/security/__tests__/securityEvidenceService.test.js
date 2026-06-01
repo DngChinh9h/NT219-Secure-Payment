@@ -17,6 +17,16 @@ jest.mock("../securityHardeningService", () => ({
   getSecurityHardeningEvidence: mockGetSecurityHardeningEvidence,
 }));
 
+const mockGetReconciliationSummary = jest.fn();
+jest.mock("../reconciliationService", () => ({
+  getReconciliationSummary: mockGetReconciliationSummary,
+}));
+
+const mockGetRiskEvidence = jest.fn();
+jest.mock("../riskEvidenceService", () => ({
+  getRiskEvidence: mockGetRiskEvidence,
+}));
+
 const service = require("../securityEvidenceService");
 
 describe("securityEvidenceService", () => {
@@ -35,6 +45,16 @@ describe("securityEvidenceService", () => {
       rateLimitEnabled: true,
       corsRestricted: true,
       securityHeadersEnabled: true,
+    });
+    mockGetReconciliationSummary.mockResolvedValueOnce({
+      status: "ok",
+      mismatchCount: 0,
+      checkedAt: "2026-06-01T00:00:01.000Z",
+    });
+    mockGetRiskEvidence.mockResolvedValueOnce({
+      status: "review",
+      triggeredRules: 2,
+      checkedAt: "2026-06-01T00:00:02.000Z",
     });
     mockVerifyAuditChain.mockResolvedValueOnce({
       valid: true,
@@ -74,6 +94,16 @@ describe("securityEvidenceService", () => {
         providers: ["stripe", "mock_bank"],
       },
       providerRefundEnabled: true,
+      reconciliationEnabled: true,
+      fraudRiskEvidenceEnabled: true,
+      latestReconciliationStatus: {
+        status: "ok",
+        mismatchCount: 0,
+      },
+      latestRiskStatus: {
+        status: "review",
+        triggeredRules: 2,
+      },
       hardening: {
         rateLimitEnabled: true,
         corsRestricted: true,

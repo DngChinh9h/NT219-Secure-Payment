@@ -22,6 +22,16 @@ jest.mock("../securityHardeningService", () => ({
   getSecurityHardeningEvidence: mockGetSecurityHardeningEvidence,
 }));
 
+const mockGetReconciliationSummary = jest.fn();
+jest.mock("../reconciliationService", () => ({
+  getReconciliationSummary: mockGetReconciliationSummary,
+}));
+
+const mockGetRiskEvidence = jest.fn();
+jest.mock("../riskEvidenceService", () => ({
+  getRiskEvidence: mockGetRiskEvidence,
+}));
+
 const mockGetKeyStatus = jest.fn();
 const mockRotateSigningKey = jest.fn();
 jest.mock("../../crypto/receiptSigningKeyService", () => ({
@@ -86,6 +96,28 @@ describe("securityController", () => {
     const res = mockResponse();
 
     controller.getHardening({}, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(evidence);
+  });
+
+  test("returns reconciliation summary", async () => {
+    const summary = { status: "ok", mismatchCount: 0, mismatches: [] };
+    mockGetReconciliationSummary.mockResolvedValueOnce(summary);
+    const res = mockResponse();
+
+    await controller.getReconciliation({}, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(summary);
+  });
+
+  test("returns rule-based risk evidence", async () => {
+    const evidence = { status: "review", triggeredRules: 1 };
+    mockGetRiskEvidence.mockResolvedValueOnce(evidence);
+    const res = mockResponse();
+
+    await controller.getRiskEvidence({}, res);
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(evidence);

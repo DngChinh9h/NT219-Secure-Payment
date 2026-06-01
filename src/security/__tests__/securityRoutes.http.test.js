@@ -37,6 +37,36 @@ jest.mock("../../crypto/receiptSigningKeyService", () => ({
   })),
 }));
 
+jest.mock("../reconciliationService", () => ({
+  getReconciliationSummary: jest.fn(async () => ({
+    totalOrders: 2,
+    paidOrders: 1,
+    refundedOrders: 1,
+    totalTransactions: 2,
+    successfulTransactions: 1,
+    refundedTransactions: 1,
+    refundRequests: 1,
+    providerLinkedPayments: 2,
+    providerLinkedRefunds: 1,
+    status: "ok",
+    mismatchCount: 0,
+    mismatches: [],
+    checkedAt: "2026-06-01T00:00:01.000Z",
+  })),
+}));
+
+jest.mock("../riskEvidenceService", () => ({
+  getRiskEvidence: jest.fn(async () => ({
+    status: "review",
+    triggeredRules: 1,
+    checkedAt: "2026-06-01T00:00:02.000Z",
+    rules: {
+      duplicatePaymentAttemptsBlocked: { enabled: true, observedCount: 1 },
+      duplicateRefundAttemptsBlocked: { enabled: true, observedCount: 1 },
+    },
+  })),
+}));
+
 const securityRoutes = require("../securityRoutes");
 
 function createApp() {
@@ -80,6 +110,10 @@ describe("securityRoutes HTTP authorization", () => {
       );
       const keys = await fetch(`${baseUrl}/api/admin/security/keys/status`);
       const hardening = await fetch(`${baseUrl}/api/admin/security/hardening`);
+      const reconciliation = await fetch(
+        `${baseUrl}/api/admin/security/reconciliation`,
+      );
+      const risk = await fetch(`${baseUrl}/api/admin/security/risk-evidence`);
       const rotate = await fetch(`${baseUrl}/api/admin/security/keys/rotate`, {
         method: "POST",
       });
@@ -88,6 +122,8 @@ describe("securityRoutes HTTP authorization", () => {
       expect(chain.status).toBe(401);
       expect(keys.status).toBe(401);
       expect(hardening.status).toBe(401);
+      expect(reconciliation.status).toBe(401);
+      expect(risk.status).toBe(401);
       expect(rotate.status).toBe(401);
     });
   });
@@ -110,6 +146,13 @@ describe("securityRoutes HTTP authorization", () => {
       const hardening = await fetch(`${baseUrl}/api/admin/security/hardening`, {
         headers,
       });
+      const reconciliation = await fetch(
+        `${baseUrl}/api/admin/security/reconciliation`,
+        { headers },
+      );
+      const risk = await fetch(`${baseUrl}/api/admin/security/risk-evidence`, {
+        headers,
+      });
       const rotate = await fetch(`${baseUrl}/api/admin/security/keys/rotate`, {
         method: "POST",
         headers,
@@ -119,7 +162,43 @@ describe("securityRoutes HTTP authorization", () => {
       expect(chain.status).toBe(403);
       expect(keys.status).toBe(403);
       expect(hardening.status).toBe(403);
+      expect(reconciliation.status).toBe(403);
+      expect(risk.status).toBe(403);
       expect(rotate.status).toBe(403);
+    });
+  });
+
+  test("admin receives reconciliation counts and rule-based risk evidence", async () => {
+    mockVerifyJWT.mockReturnValue({ userId: "admin_1", role: "admin" });
+
+    await withServer(async (baseUrl) => {
+      const headers = { Authorization: "Bearer admin-token" };
+      const reconciliationResponse = await fetch(
+        `${baseUrl}/api/admin/security/reconciliation`,
+        { headers },
+      );
+      const reconciliation = await reconciliationResponse.json();
+      const riskResponse = await fetch(
+        `${baseUrl}/api/admin/security/risk-evidence`,
+        { headers },
+      );
+      const risk = await riskResponse.json();
+
+      expect(reconciliationResponse.status).toBe(200);
+      expect(reconciliation).toMatchObject({
+        totalOrders: 2,
+        refundedOrders: 1,
+        mismatchCount: 0,
+        mismatches: [],
+      });
+      expect(riskResponse.status).toBe(200);
+      expect(risk).toMatchObject({
+        status: "review",
+        rules: {
+          duplicatePaymentAttemptsBlocked: { enabled: true },
+          duplicateRefundAttemptsBlocked: { enabled: true },
+        },
+      });
     });
   });
 

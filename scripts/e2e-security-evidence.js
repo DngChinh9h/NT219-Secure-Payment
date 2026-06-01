@@ -207,6 +207,8 @@ function assertProtectionEvidence(evidence) {
   assert(evidence.hardening?.rateLimitEnabled === true, "Rate-limit hardening evidence missing", evidence);
   assert(evidence.hardening?.corsRestricted === true, "CORS hardening evidence missing", evidence);
   assert(evidence.hardening?.securityHeadersEnabled === true, "Header hardening evidence missing", evidence);
+  assert(evidence.reconciliationEnabled === true, "Reconciliation evidence missing", evidence);
+  assert(evidence.fraudRiskEvidenceEnabled === true, "Fraud risk evidence missing", evidence);
   assert(
     evidence.latestEvidenceTimestamps &&
       Object.keys(evidence.latestEvidenceTimestamps).length > 0,

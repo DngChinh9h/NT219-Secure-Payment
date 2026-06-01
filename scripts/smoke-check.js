@@ -61,3 +61,17 @@ check("health readiness service import", () => {
     throw new Error("checkReadiness missing");
   }
 });
+
+check("reconciliation service import", () => {
+  const { getReconciliationSummary } = require("../src/security/reconciliationService");
+  if (typeof getReconciliationSummary !== "function") {
+    throw new Error("getReconciliationSummary missing");
+  }
+});
+
+check("risk evidence service import", () => {
+  const { getRiskEvidence } = require("../src/security/riskEvidenceService");
+  if (typeof getRiskEvidence !== "function") {
+    throw new Error("getRiskEvidence missing");
+  }
+});

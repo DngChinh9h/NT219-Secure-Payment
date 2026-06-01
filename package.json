@@ -29,6 +29,7 @@
     "e2e:security": "node scripts/e2e-security-evidence.js",
     "e2e:key-rotation": "node scripts/e2e-key-rotation.js",
     "e2e:hardening": "node scripts/e2e-hardening.js",
+    "e2e:reconciliation": "node scripts/e2e-reconciliation.js",
     "e2e:production": "node scripts/check-production.js",
     "start:prod": "npm run migrate:deploy && node src/index.js",
     "smoke": "node scripts/smoke-check.js"

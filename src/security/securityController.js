@@ -5,6 +5,8 @@ const { verifyReceipt: verifySignedReceipt } = require("../crypto");
 const signingKeyService = require("../crypto/receiptSigningKeyService");
 const securityEvidenceService = require("./securityEvidenceService");
 const securityHardeningService = require("./securityHardeningService");
+const reconciliationService = require("./reconciliationService");
+const riskEvidenceService = require("./riskEvidenceService");
 
 async function verifyAuditChain(req, res) {
   try {
@@ -32,6 +34,24 @@ function getHardening(req, res) {
       .json(securityHardeningService.getSecurityHardeningEvidence());
   } catch {
     return res.status(500).json({ error: "Failed to get security hardening evidence" });
+  }
+}
+
+async function getReconciliation(req, res) {
+  try {
+    return res
+      .status(200)
+      .json(await reconciliationService.getReconciliationSummary());
+  } catch {
+    return res.status(500).json({ error: "Failed to reconcile payment records" });
+  }
+}
+
+async function getRiskEvidence(req, res) {
+  try {
+    return res.status(200).json(await riskEvidenceService.getRiskEvidence());
+  } catch {
+    return res.status(500).json({ error: "Failed to get fraud risk evidence" });
   }
 }
 
@@ -103,7 +123,9 @@ async function rotateReceiptSigningKey(req, res) {
 module.exports = {
   getEvidence,
   getHardening,
+  getReconciliation,
   getReceiptSigningKeyStatus,
+  getRiskEvidence,
   rotateReceiptSigningKey,
   verifyAuditChain,
   verifyReceipt,

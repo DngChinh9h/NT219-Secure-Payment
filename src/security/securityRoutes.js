@@ -13,6 +13,8 @@ router.get("/audit-chain/verify", controller.verifyAuditChain);
 router.get("/evidence", controller.getEvidence);
 router.get("/hardening", controller.getHardening);
 router.get("/keys/status", controller.getReceiptSigningKeyStatus);
+router.get("/reconciliation", controller.getReconciliation);
+router.get("/risk-evidence", controller.getRiskEvidence);
 router.post("/keys/rotate", controller.rotateReceiptSigningKey);
 router.post("/receipt/verify", controller.verifyReceipt);
 
