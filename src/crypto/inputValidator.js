@@ -99,6 +99,12 @@ const refundRequestRejectSchema = z.object({
   adminNote: z.string().trim().min(1, "adminNote is required").max(2000),
 });
 
+const refundRequestApproveSchema = z
+  .object({
+    mockRefundOutcome: z.enum(["success", "failed", "pending"]).optional(),
+  })
+  .default({});
+
 const refundRequestIdSchema = z.object({
   id: z.string().uuid("refund request id must be UUID"),
 });
@@ -149,5 +155,6 @@ module.exports = {
   paymentSchema,
   refundRequestSchema,
   refundRequestRejectSchema,
+  refundRequestApproveSchema,
   refundRequestIdSchema,
 };

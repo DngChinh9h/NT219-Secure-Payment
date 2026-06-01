@@ -5,9 +5,10 @@ jest.mock("dotenv", () => ({ config: jest.fn() }));
 
 // Mock DB — paymentService.js uses require('../db') which resolves to src/db
 const mockQuery = jest.fn();
+const mockConnect = jest.fn();
 jest.mock("../../db", () => ({
   query: mockQuery,
-  connect: jest.fn(),
+  connect: mockConnect,
 }));
 
 // Mock Stripe — paymentService.js does: const Stripe = require('stripe'); const stripe = Stripe(key);
@@ -207,18 +208,31 @@ describe("paymentService refund flow", () => {
     stripe_payment_id: "mock_pi_success",
     order_status: "paid",
   };
+  const mockClientQuery = jest.fn();
+  const mockClientRelease = jest.fn();
+
+  function mockSuccessfulRefundPersistence(updatedTx) {
+    mockConnect.mockResolvedValueOnce({
+      query: mockClientQuery,
+      release: mockClientRelease,
+    });
+    mockClientQuery
+      .mockResolvedValueOnce()
+      .mockResolvedValueOnce({ rowCount: 1, rows: [updatedTx] })
+      .mockResolvedValueOnce();
+  }
 
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
   test("refunds a successful mock_bank transaction", async () => {
-    mockQuery
-      .mockResolvedValueOnce({ rowCount: 1, rows: [successTx] })
-      .mockResolvedValueOnce({
-        rowCount: 1,
-        rows: [{ ...successTx, status: "refunded", refund_id: "mock_re_1" }],
-      });
+    mockQuery.mockResolvedValueOnce({ rowCount: 1, rows: [successTx] });
+    mockSuccessfulRefundPersistence({
+      ...successTx,
+      status: "refunded",
+      refund_id: "mock_re_1",
+    });
 
     const result = await refundTransaction({
       transactionId,
@@ -229,11 +243,13 @@ describe("paymentService refund flow", () => {
 
     expect(result.message).toBe("Refund processed");
     expect(result.refundId).toMatch(/^mock_re_/);
+    expect(result.providerStatus).toBe("succeeded");
     expect(result.transaction.status).toBe("refunded");
     expect(orderService.updateOrderStatus).toHaveBeenCalledWith(
       orderId,
       "refunded",
       "mock_pi_success",
+      expect.objectContaining({ query: mockClientQuery }),
     );
   });
 
@@ -311,22 +327,22 @@ describe("paymentService refund flow", () => {
   });
 
   test("refunds a successful stripe transaction through Stripe refund API", async () => {
-    mockQuery
-      .mockResolvedValueOnce({
-        rowCount: 1,
-        rows: [
-          {
-            ...successTx,
-            provider: "stripe",
-            provider_payment_id: "pi_refund",
-            stripe_payment_id: "pi_refund",
-          },
-        ],
-      })
-      .mockResolvedValueOnce({
-        rowCount: 1,
-        rows: [{ ...successTx, status: "refunded", refund_id: "re_1" }],
-      });
+    mockQuery.mockResolvedValueOnce({
+      rowCount: 1,
+      rows: [
+        {
+          ...successTx,
+          provider: "stripe",
+          provider_payment_id: "pi_refund",
+          stripe_payment_id: "pi_refund",
+        },
+      ],
+    });
+    mockSuccessfulRefundPersistence({
+      ...successTx,
+      status: "refunded",
+      refund_id: "re_1",
+    });
     mockRefundsCreate.mockResolvedValueOnce({
       id: "re_1",
       status: "succeeded",
@@ -344,7 +360,86 @@ describe("paymentService refund flow", () => {
       payment_intent: "pi_refund",
       amount: 50000,
       reason: "requested_by_customer",
+      metadata: {
+        orderId,
+        transactionId,
+        userId,
+      },
     });
+  });
+
+  test("does not update transaction or order while provider refund is pending", async () => {
+    mockQuery.mockResolvedValueOnce({ rowCount: 1, rows: [successTx] });
+
+    const result = await refundTransaction({
+      transactionId,
+      reason: "requested_by_customer",
+      userId,
+      role: "admin",
+      mockRefundOutcome: "pending",
+    });
+
+    expect(result).toMatchObject({
+      message: "Refund pending provider confirmation",
+      provider: "mock_bank",
+      providerStatus: "pending",
+      transaction: successTx,
+    });
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+    expect(orderService.updateOrderStatus).not.toHaveBeenCalled();
+  });
+
+  test("does not update transaction or order when provider refund fails", async () => {
+    mockQuery.mockResolvedValueOnce({ rowCount: 1, rows: [successTx] });
+
+    const result = await refundTransaction({
+      transactionId,
+      reason: "requested_by_customer",
+      userId,
+      role: "admin",
+      mockRefundOutcome: "failed",
+    });
+
+    expect(result).toMatchObject({
+      message: "Refund provider failed",
+      provider: "mock_bank",
+      providerStatus: "failed",
+      providerError: "MockBank refund failed",
+      transaction: successTx,
+    });
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+    expect(orderService.updateOrderStatus).not.toHaveBeenCalled();
+  });
+
+  test("rolls back refunded transaction update if order update fails", async () => {
+    mockQuery.mockResolvedValueOnce({ rowCount: 1, rows: [successTx] });
+    mockConnect.mockResolvedValueOnce({
+      query: mockClientQuery,
+      release: mockClientRelease,
+    });
+    mockClientQuery
+      .mockResolvedValueOnce()
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{ ...successTx, status: "refunded" }],
+      })
+      .mockResolvedValueOnce();
+    orderService.updateOrderStatus.mockRejectedValueOnce(
+      new Error("Order update failed"),
+    );
+
+    await expect(
+      refundTransaction({
+        transactionId,
+        reason: "requested_by_customer",
+        userId,
+        role: "admin",
+      }),
+    ).rejects.toThrow("Order update failed");
+
+    expect(mockClientQuery).toHaveBeenNthCalledWith(1, "BEGIN");
+    expect(mockClientQuery).toHaveBeenNthCalledWith(3, "ROLLBACK");
+    expect(mockClientRelease).toHaveBeenCalledTimes(1);
   });
 });
 

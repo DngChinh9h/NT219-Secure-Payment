@@ -13,6 +13,7 @@ const CUSTOMER_EMAIL =
   `e2e_customer_${Date.now()}@example.com`;
 const CUSTOMER_PASSWORD =
   process.env.E2E_CUSTOMER_PASSWORD || "Password123!";
+const TEST_STRIPE_REFUND = process.env.E2E_TEST_STRIPE_REFUND === "true";
 const ORDER_TOTAL = 3680000;
 
 const summary = [];
@@ -167,6 +168,39 @@ async function payOrderMockSuccess(customerToken, orderId, amount) {
   return body;
 }
 
+async function payOrderStripeTest(customerToken, orderId, amount) {
+  const { body } = await request("POST", "/api/payments/create-intent", {
+    token: customerToken,
+    body: {
+      orderId,
+      provider: "stripe",
+      paymentToken: "pm_card_visa",
+      amount,
+      nonce: crypto.randomUUID(),
+      timestamp: serverTimestamp || Date.now(),
+    },
+    expectedStatus: 200,
+  });
+
+  assert(
+    body?.paymentIntentId?.startsWith("pi_"),
+    `Stripe payment response is missing a PaymentIntent id for order ${orderId}`,
+    body,
+  );
+  return body;
+}
+
+async function syncPayment(customerToken, paymentIntentId) {
+  return request(
+    "POST",
+    `/api/payments/sync/${encodeURIComponent(paymentIntentId)}`,
+    {
+      token: customerToken,
+      expectedStatus: 200,
+    },
+  );
+}
+
 async function getOrdersMine(customerToken) {
   const { body } = await request("GET", "/api/orders/mine", {
     token: customerToken,
@@ -273,6 +307,57 @@ async function createPaidOrder(customerToken, suffix) {
   );
 
   return paidOrder;
+}
+
+async function runStripeRefundFlow(customerToken, adminToken) {
+  const order = await createOrder(customerToken, "stripe-refund");
+  const payment = await payOrderStripeTest(customerToken, order.id, ORDER_TOTAL);
+  const sync = await syncPayment(customerToken, payment.paymentIntentId);
+
+  assert(
+    sync.body?.providerStatus === "succeeded",
+    "Stripe test PaymentIntent did not reach succeeded status",
+    sync.body,
+  );
+
+  const refundRequest = await createRefundRequest(
+    customerToken,
+    order.id,
+    "requested_by_customer",
+    "E2E Stripe refund request",
+  );
+  const refundRequestId = refundRequest.body?.refundRequest?.id;
+  assert(refundRequestId, "Stripe refund request response is missing id");
+
+  const approval = await adminApproveRefundRequest(adminToken, refundRequestId);
+  assert(
+    approval.body?.refundRequest?.status === "succeeded",
+    "Stripe refund request did not succeed",
+    approval.body,
+  );
+  assert(
+    approval.body.refundRequest.provider_refund_id?.startsWith("re_"),
+    "Stripe refund request is missing a Stripe re_ refund id",
+    approval.body,
+  );
+
+  const transactions = await getTransactionsMine(customerToken);
+  const transaction = transactions.find(
+    (candidate) => candidate.order_id === order.id,
+  );
+  assert(
+    transaction?.status === "refunded",
+    "Stripe refund did not mark transaction refunded",
+    transaction,
+  );
+
+  const orders = await getOrdersMine(customerToken);
+  const refundedOrder = orders.find((candidate) => candidate.id === order.id);
+  assert(
+    refundedOrder?.status === "refunded",
+    "Stripe refund did not mark order refunded",
+    refundedOrder,
+  );
 }
 
 async function run() {
@@ -401,37 +486,29 @@ async function run() {
   const finalRequest = approval.body?.refundRequest;
 
   assert(
-    ["succeeded", "provider_failed"].includes(finalRequest?.status),
-    "Admin approve returned unexpected refund request status",
+    finalRequest?.status === "succeeded",
+    "Default MockBank admin approval did not succeed",
     approval.body,
   );
 
-  if (finalRequest.status === "succeeded") {
-    assert(
-      finalRequest.provider_refund_id ||
-        approval.body?.refund?.refundId ||
-        approval.body?.refund?.transaction?.refund_id,
-      "Successful approval is missing provider refund metadata",
-      approval.body,
-    );
+  assert(
+    finalRequest.provider_refund_id ||
+      approval.body?.refund?.refundId ||
+      approval.body?.refund?.transaction?.refund_id,
+    "Successful approval is missing provider refund metadata",
+    approval.body,
+  );
 
-    const transactions = await getTransactionsMine(customerToken);
-    const refundedTransaction = transactions.find(
-      (candidate) => candidate.order_id === approvedOrder.id,
-    );
-    assert(
-      refundedTransaction?.status === "refunded",
-      "Successful approval did not refund transaction",
-      refundedTransaction,
-    );
-    await getReceipt(customerToken, refundedTransaction.id);
-  } else {
-    assert(
-      finalRequest.provider_error,
-      "provider_failed request is missing provider_error",
-      finalRequest,
-    );
-  }
+  const transactions = await getTransactionsMine(customerToken);
+  const refundedTransaction = transactions.find(
+    (candidate) => candidate.order_id === approvedOrder.id,
+  );
+  assert(
+    refundedTransaction?.status === "refunded",
+    "Successful approval did not refund transaction",
+    refundedTransaction,
+  );
+  await getReceipt(customerToken, refundedTransaction.id);
   pass(`admin approve / provider result: ${finalRequest.status}`);
 
   await adminApproveRefundRequest(adminToken, approvedRequestId, [400, 409]);
@@ -451,6 +528,11 @@ async function run() {
     unpaidAttempt.body,
   );
   pass("unpaid order blocked");
+
+  if (TEST_STRIPE_REFUND) {
+    await runStripeRefundFlow(customerToken, adminToken);
+    pass("opt-in Stripe refund");
+  }
 
   // Keep this helper exercised and available for follow-up smoke extensions.
   void cancelRefundRequest;
@@ -484,6 +566,9 @@ module.exports = {
   getTransactionsMine,
   login,
   payOrderMockSuccess,
+  payOrderStripeTest,
   registerCustomer,
   request,
+  runStripeRefundFlow,
+  syncPayment,
 };

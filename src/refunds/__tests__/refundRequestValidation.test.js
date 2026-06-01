@@ -2,6 +2,7 @@
 
 const {
   refundRequestSchema,
+  refundRequestApproveSchema,
   refundRequestRejectSchema,
   refundRequestIdSchema,
 } = require("../../crypto/inputValidator");
@@ -37,5 +38,20 @@ describe("refund request validation", () => {
     expect(refundRequestIdSchema.safeParse({ id: "not-a-uuid" }).success).toBe(
       false,
     );
+  });
+
+  test("accepts empty approve body and supported MockBank outcomes", () => {
+    expect(refundRequestApproveSchema.safeParse(undefined).success).toBe(true);
+    expect(
+      refundRequestApproveSchema.safeParse({ mockRefundOutcome: "pending" })
+        .success,
+    ).toBe(true);
+  });
+
+  test("rejects unsupported MockBank approve outcome", () => {
+    expect(
+      refundRequestApproveSchema.safeParse({ mockRefundOutcome: "unknown" })
+        .success,
+    ).toBe(false);
   });
 });

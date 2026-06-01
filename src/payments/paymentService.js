@@ -356,7 +356,61 @@ function getProviderPaymentIdForTransaction(tx) {
   return tx.provider_payment_id || tx.stripe_payment_id;
 }
 
-async function refundTransaction({ transactionId, reason, userId, role }) {
+async function persistSuccessfulRefund({
+  transactionId,
+  refundId,
+  reason,
+  tx,
+  providerPaymentId,
+}) {
+  const client = await db.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const updateResult = await client.query(
+      `UPDATE transactions
+       SET status = 'refunded',
+           refund_id = $1,
+           refunded_at = NOW(),
+           refund_reason = $2
+       WHERE id = $3
+         AND status = 'success'
+       RETURNING *`,
+      [refundId, reason, transactionId],
+    );
+
+    if (updateResult.rowCount === 0) {
+      const err = new Error("Transaction already refunded");
+      err.statusCode = 409;
+      throw err;
+    }
+
+    await orderService.updateOrderStatus(
+      tx.order_id,
+      "refunded",
+      providerPaymentId,
+      client,
+    );
+    await client.query("COMMIT");
+
+    return updateResult.rows[0];
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+async function refundTransaction({
+  transactionId,
+  reason,
+  userId,
+  role,
+  metadata = {},
+  mockRefundOutcome,
+}) {
   const txResult = await db.query(
     `SELECT t.*, o.status AS order_status, o.id AS order_id, o.user_id AS order_user_id
      FROM transactions t
@@ -400,32 +454,44 @@ async function refundTransaction({ transactionId, reason, userId, role }) {
     providerPaymentId,
     amount: tx.amount,
     reason,
+    metadata: {
+      orderId: tx.order_id,
+      transactionId: tx.id,
+      userId: tx.user_id,
+      ...metadata,
+    },
+    mockRefundOutcome,
   });
 
-  const updateResult = await db.query(
-    `UPDATE transactions
-     SET status = 'refunded',
-         refund_id = $1,
-         refunded_at = NOW(),
-         refund_reason = $2
-     WHERE id = $3
-       AND status = 'success'
-     RETURNING *`,
-    [refund.refundId, reason, transactionId],
-  );
-
-  if (updateResult.rowCount === 0) {
-    const err = new Error("Transaction already refunded");
-    err.statusCode = 409;
-    throw err;
+  if (refund.status !== "succeeded") {
+    return {
+      message:
+        refund.status === "pending"
+          ? "Refund pending provider confirmation"
+          : "Refund provider failed",
+      refundId: refund.refundId,
+      provider: providerName,
+      providerStatus: refund.status,
+      providerError: refund.providerError || null,
+      transaction: tx,
+    };
   }
 
-  await orderService.updateOrderStatus(tx.order_id, "refunded", providerPaymentId);
+  const transaction = await persistSuccessfulRefund({
+    transactionId,
+    refundId: refund.refundId,
+    reason,
+    tx,
+    providerPaymentId,
+  });
 
   return {
     message: "Refund processed",
     refundId: refund.refundId,
-    transaction: updateResult.rows[0],
+    provider: providerName,
+    providerStatus: refund.status,
+    providerError: null,
+    transaction,
   };
 }
 

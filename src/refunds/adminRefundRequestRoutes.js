@@ -6,6 +6,7 @@ const { requireAdmin } = require("../gateway/authzMiddleware");
 const {
   validate,
   validateParams,
+  refundRequestApproveSchema,
   refundRequestRejectSchema,
   refundRequestIdSchema,
 } = require("../crypto");
@@ -25,6 +26,7 @@ router.post(
 router.post(
   "/refund-requests/:id/approve",
   validateParams(refundRequestIdSchema),
+  validate(refundRequestApproveSchema),
   controller.approveRefundRequest,
 );
 

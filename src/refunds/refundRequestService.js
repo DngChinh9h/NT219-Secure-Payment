@@ -9,6 +9,13 @@ function createError(message, statusCode) {
   return err;
 }
 
+function sanitizeProviderError(message) {
+  return String(message || "Provider refund failed")
+    .replace(/\bsk_(?:test|live)_[A-Za-z0-9]+\b/g, "[REDACTED]")
+    .replace(/\bwhsec_[A-Za-z0-9]+\b/g, "[REDACTED]")
+    .slice(0, 2000);
+}
+
 async function findRequestById(id) {
   const result = await db.query(
     `SELECT *
@@ -206,7 +213,11 @@ async function rejectRefundRequest({ requestId, adminNote, adminUserId }) {
   );
 }
 
-async function approveRefundRequest({ requestId, adminUserId }) {
+async function approveRefundRequest({
+  requestId,
+  adminUserId,
+  mockRefundOutcome,
+}) {
   const claimResult = await db.query(
     `UPDATE refund_requests
      SET status = 'approved_processing',
@@ -239,17 +250,32 @@ async function approveRefundRequest({ requestId, adminUserId }) {
       reason: request.reason,
       userId: adminUserId,
       role: "admin",
+      metadata: {
+        refundRequestId: request.id,
+      },
+      mockRefundOutcome,
     });
+
+    const requestStatus =
+      refundResult.providerStatus === "succeeded"
+        ? "succeeded"
+        : refundResult.providerStatus === "pending"
+          ? "approved_processing"
+          : "provider_failed";
+    const providerError =
+      requestStatus === "provider_failed"
+        ? sanitizeProviderError(refundResult.providerError)
+        : null;
 
     const updateResult = await db.query(
       `UPDATE refund_requests
-       SET status = 'succeeded',
-           provider_refund_id = $2,
-           provider_error = NULL,
+       SET status = $2,
+           provider_refund_id = $3,
+           provider_error = $4,
            updated_at = NOW()
        WHERE id = $1
        RETURNING *`,
-      [requestId, refundResult.refundId],
+      [requestId, requestStatus, refundResult.refundId, providerError],
     );
 
     return {
@@ -257,6 +283,7 @@ async function approveRefundRequest({ requestId, adminUserId }) {
       refund: refundResult,
     };
   } catch (err) {
+    const providerError = sanitizeProviderError(err.message);
     await db
       .query(
         `UPDATE refund_requests
@@ -264,10 +291,11 @@ async function approveRefundRequest({ requestId, adminUserId }) {
              provider_error = $2,
              updated_at = NOW()
          WHERE id = $1`,
-        [requestId, err.message],
+        [requestId, providerError],
       )
       .catch(() => {});
 
+    err.message = providerError;
     throw err;
   }
 }

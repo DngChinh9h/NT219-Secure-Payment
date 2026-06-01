@@ -226,6 +226,7 @@ describe("refundRequestService admin workflow", () => {
     mockRefundTransaction.mockResolvedValueOnce({
       message: "Refund processed",
       refundId: "mock_re_1",
+      providerStatus: "succeeded",
       transaction: { id: transactionId, status: "refunded" },
     });
 
@@ -236,8 +237,78 @@ describe("refundRequestService admin workflow", () => {
       reason: "requested_by_customer",
       userId: adminUserId,
       role: "admin",
+      metadata: {
+        refundRequestId: requestId,
+      },
+      mockRefundOutcome: undefined,
     });
     expect(result.request).toEqual(succeeded);
+  });
+
+  test("admin approve keeps request processing while provider refund is pending", async () => {
+    const processing = { ...pendingRequest, status: "approved_processing" };
+    const stillProcessing = {
+      ...processing,
+      provider_refund_id: "mock_re_pending",
+      provider_error: null,
+    };
+    mockQuery
+      .mockResolvedValueOnce({ rowCount: 1, rows: [processing] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [stillProcessing] });
+    mockRefundTransaction.mockResolvedValueOnce({
+      message: "Refund pending provider confirmation",
+      refundId: "mock_re_pending",
+      providerStatus: "pending",
+      transaction: { id: transactionId, status: "success" },
+    });
+
+    const result = await service.approveRefundRequest({
+      requestId,
+      adminUserId,
+      mockRefundOutcome: "pending",
+    });
+
+    expect(result.request).toEqual(stillProcessing);
+    expect(mockQuery.mock.calls[1][1]).toEqual([
+      requestId,
+      "approved_processing",
+      "mock_re_pending",
+      null,
+    ]);
+  });
+
+  test("admin approve stores provider_failed without marking refund succeeded", async () => {
+    const processing = { ...pendingRequest, status: "approved_processing" };
+    const providerFailed = {
+      ...processing,
+      status: "provider_failed",
+      provider_refund_id: "mock_re_failed",
+      provider_error: "MockBank refund failed",
+    };
+    mockQuery
+      .mockResolvedValueOnce({ rowCount: 1, rows: [processing] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [providerFailed] });
+    mockRefundTransaction.mockResolvedValueOnce({
+      message: "Refund provider failed",
+      refundId: "mock_re_failed",
+      providerStatus: "failed",
+      providerError: "MockBank refund failed",
+      transaction: { id: transactionId, status: "success" },
+    });
+
+    const result = await service.approveRefundRequest({
+      requestId,
+      adminUserId,
+      mockRefundOutcome: "failed",
+    });
+
+    expect(result.request).toEqual(providerFailed);
+    expect(mockQuery.mock.calls[1][1]).toEqual([
+      requestId,
+      "provider_failed",
+      "mock_re_failed",
+      "MockBank refund failed",
+    ]);
   });
 
   test("duplicate refund is blocked and request records provider_failed", async () => {

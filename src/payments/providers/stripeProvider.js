@@ -40,17 +40,43 @@ async function retrievePayment(providerPaymentId) {
   };
 }
 
-async function refundPayment({ providerPaymentId, amount, reason }) {
+function mapRefundReason(reason) {
+  if (reason === "duplicate" || reason === "fraudulent") {
+    return reason;
+  }
+
+  return "requested_by_customer";
+}
+
+function normalizeRefundStatus(status) {
+  if (status === "succeeded" || status === "pending") {
+    return status;
+  }
+
+  return "failed";
+}
+
+function normalizeMetadata(metadata = {}) {
+  return Object.fromEntries(
+    Object.entries(metadata)
+      .filter(([, value]) => value !== undefined && value !== null)
+      .map(([key, value]) => [key, String(value)]),
+  );
+}
+
+async function refundPayment({ providerPaymentId, amount, reason, metadata }) {
   const refund = await stripe.refunds.create({
     payment_intent: providerPaymentId,
     amount: Number(amount),
-    reason,
+    reason: mapRefundReason(reason),
+    metadata: normalizeMetadata(metadata),
   });
 
   return {
     provider: "stripe",
     refundId: refund.id,
-    status: refund.status,
+    status: normalizeRefundStatus(refund.status),
+    providerError: refund.failure_reason || null,
     raw: refund,
   };
 }

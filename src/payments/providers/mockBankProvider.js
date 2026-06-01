@@ -8,6 +8,15 @@ const TOKEN_STATUSES = Object.freeze({
   mock_pending: "processing",
 });
 
+const REFUND_STATUSES = Object.freeze({
+  success: "succeeded",
+  failed: "failed",
+  pending: "pending",
+  mock_refund_success: "succeeded",
+  mock_refund_failed: "failed",
+  mock_refund_pending: "pending",
+});
+
 async function createPayment({ order, paymentMethodToken }) {
   const status = TOKEN_STATUSES[paymentMethodToken];
 
@@ -47,19 +56,36 @@ async function retrievePayment(providerPaymentId) {
   };
 }
 
-async function refundPayment({ providerPaymentId, amount, reason }) {
+async function refundPayment({
+  providerPaymentId,
+  amount,
+  reason,
+  metadata = {},
+  mockRefundOutcome = "success",
+}) {
   const refundId = `mock_re_${crypto.randomUUID()}`;
+  const status = REFUND_STATUSES[mockRefundOutcome];
+
+  if (!status) {
+    const err = new Error("Invalid MockBank refund outcome");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const providerError = status === "failed" ? "MockBank refund failed" : null;
 
   return {
     provider: "mock_bank",
     refundId,
-    status: "succeeded",
+    status,
+    providerError,
     raw: {
       id: refundId,
       providerPaymentId,
       amount: Number(amount),
       reason,
-      status: "succeeded",
+      metadata,
+      status,
     },
   };
 }

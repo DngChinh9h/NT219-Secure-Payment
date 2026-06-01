@@ -89,21 +89,23 @@ async function approveRefundRequest(req, res) {
     const result = await refundRequestService.approveRefundRequest({
       requestId: req.params.id,
       adminUserId: req.user.userId,
+      mockRefundOutcome: req.body.mockRefundOutcome,
     });
 
     await auditService.log({
-      eventType: "refund_request_succeeded",
+      eventType: `refund_request_${result.request.status}`,
       userId: req.user.userId,
       ipAddress: req.ip,
       payload: {
         requestId: result.request.id,
         orderId: result.request.order_id,
         refundId: result.refund.refundId,
+        providerStatus: result.refund.providerStatus,
       },
     });
 
     return res.status(200).json({
-      message: "Refund request approved and processed",
+      message: result.refund.message,
       refundRequest: result.request,
       refund: result.refund,
     });

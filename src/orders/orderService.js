@@ -92,8 +92,9 @@ async function updateOrderStatus(
   orderId,
   status,
   stripePaymentIntentId = null,
+  queryable = db,
 ) {
-  const orderResult = await db.query(
+  const orderResult = await queryable.query(
     "SELECT status, stripe_payment_intent_id FROM orders WHERE id = $1 LIMIT 1",
     [orderId],
   );
@@ -106,7 +107,7 @@ async function updateOrderStatus(
   const nextStripePaymentIntentId =
     stripePaymentIntentId || currentOrder.stripe_payment_intent_id || null;
 
-  const result = await db.query(
+  const result = await queryable.query(
     `UPDATE orders
          SET status = $1, stripe_payment_intent_id = $2, updated_at = NOW()
          WHERE id = $3

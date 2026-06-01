@@ -136,13 +136,17 @@ async function refundPayment(req, res) {
     });
 
     await auditService.log({
-      eventType: 'refund_processed',
+      eventType:
+        result.providerStatus === 'succeeded'
+          ? 'refund_processed'
+          : `refund_provider_${result.providerStatus}`,
       userId: req.user.userId,
       ipAddress: req.ip,
       payload: {
         transactionId,
         refundId: result.refundId,
-        reason
+        reason,
+        providerStatus: result.providerStatus
       }
     });
 

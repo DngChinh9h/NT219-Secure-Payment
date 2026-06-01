@@ -47,22 +47,32 @@ describe("mockBankProvider", () => {
     });
   });
 
-  test("refundPayment returns a mock refund id", async () => {
+  test.each([
+    ["success", "succeeded", null],
+    ["failed", "failed", "MockBank refund failed"],
+    ["pending", "pending", null],
+  ])(
+    "refundPayment maps %s outcome to %s",
+    async (mockRefundOutcome, expectedStatus, providerError) => {
     const result = await mockBankProvider.refundPayment({
       providerPaymentId: "mock_pi_123",
       amount: 50000,
       reason: "requested_by_customer",
+      mockRefundOutcome,
     });
 
     expect(result).toMatchObject({
       provider: "mock_bank",
-      status: "succeeded",
+      status: expectedStatus,
+      providerError,
     });
     expect(result.refundId).toMatch(/^mock_re_[0-9a-f-]+$/);
     expect(result.raw).toMatchObject({
       providerPaymentId: "mock_pi_123",
       amount: 50000,
       reason: "requested_by_customer",
+      status: expectedStatus,
     });
-  });
+    },
+  );
 });
