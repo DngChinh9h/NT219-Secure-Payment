@@ -1,0 +1,11 @@
+node_modules
+.env
+.env.*
+.git
+coverage
+*.log
+keys
+screenshots
+docs/screenshots
+infra/secrets
+.DS_Store

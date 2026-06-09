@@ -2,10 +2,19 @@
 
 const { checkReadiness } = require("../healthService");
 
+const TEST_PRIVATE_KEY_B64 = Buffer.from(
+  "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----",
+).toString("base64");
+const TEST_PUBLIC_KEY_B64 = Buffer.from(
+  "-----BEGIN PUBLIC KEY-----\ntest\n-----END PUBLIC KEY-----",
+).toString("base64");
+
 const validEnv = {
   NODE_ENV: "production",
   PUBLIC_APP_ENV: "production",
   DATABASE_URL: "postgres://private-database",
+  JWT_PRIVATE_KEY_B64: TEST_PRIVATE_KEY_B64,
+  JWT_PUBLIC_KEY_B64: TEST_PUBLIC_KEY_B64,
   STRIPE_SECRET_KEY: "sk_test_private",
   STRIPE_WEBHOOK_SECRET: "whsec_private",
   STRIPE_PUBLISHABLE_KEY: "pk_test_public",

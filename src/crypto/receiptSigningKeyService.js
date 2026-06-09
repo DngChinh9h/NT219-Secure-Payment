@@ -120,8 +120,8 @@ async function getKeyStatus() {
 }
 
 async function rotateSigningKey() {
-  const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", {
-    modulusLength: 2048,
+  const { publicKey, privateKey } = crypto.generateKeyPairSync("ec", {
+    namedCurve: "secp521r1",
     publicKeyEncoding: { type: "spki", format: "pem" },
     privateKeyEncoding: { type: "pkcs8", format: "pem" },
   });

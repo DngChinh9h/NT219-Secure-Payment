@@ -23,6 +23,7 @@ async function handleWebhook(req, res) {
       process.env.STRIPE_WEBHOOK_SECRET
     );
   } catch (err) {
+    console.warn(`Stripe webhook signature verification failed: ${err.message}`);
     await auditService.log({
       eventType: 'WEBHOOK_SIGNATURE_FAIL',
       payload:   { error: err.message, sigHeader: sig.substring(0, 50) }
@@ -35,6 +36,7 @@ async function handleWebhook(req, res) {
     eventType: 'WEBHOOK_RECEIVED',
     payload:   { eventType: event.type, eventId: event.id }
   });
+  console.log(`Stripe webhook verified: type=${event.type} id=${event.id}`);
   await auditService.log({
     eventType: 'webhook_received',
     payload:   { eventType: event.type, eventId: event.id }
@@ -59,6 +61,7 @@ async function handleWebhook(req, res) {
   }
 
   if (ledgerEvent?.processing_status === 'processed') {
+    console.log(`Stripe webhook duplicate ignored: type=${event.type} id=${event.id}`);
     await auditService.log({
       eventType: 'webhook_duplicate',
       payload:   { eventType: event.type, eventId: event.id }
@@ -132,6 +135,7 @@ async function handleWebhook(req, res) {
       provider: 'stripe',
       providerEventId: event.id
     });
+    console.log(`Stripe webhook processed: type=${event.type} id=${event.id}`);
   } catch (err) {
     console.error('Webhook processing error:', err);
     await webhookEventService.markFailed({

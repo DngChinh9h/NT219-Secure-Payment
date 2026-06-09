@@ -1,9 +1,18 @@
 "use strict";
 
 const crypto = require("crypto");
-const path = require("path");
-const fs = require("fs");
 const jwt = require("jsonwebtoken");
+
+const legacyKeys = crypto.generateKeyPairSync("ec", {
+  namedCurve: "secp521r1",
+  publicKeyEncoding: { type: "spki", format: "pem" },
+  privateKeyEncoding: { type: "pkcs8", format: "pem" },
+});
+
+delete process.env.JWT_PRIVATE_KEY_PATH;
+delete process.env.JWT_PUBLIC_KEY_PATH;
+process.env.JWT_PRIVATE_KEY_B64 = Buffer.from(legacyKeys.privateKey).toString("base64");
+process.env.JWT_PUBLIC_KEY_B64 = Buffer.from(legacyKeys.publicKey).toString("base64");
 
 const mockGetActiveSigningKey = jest.fn();
 const mockGetPublicKeyForVersion = jest.fn();
@@ -15,15 +24,17 @@ jest.mock("../receiptSigningKeyService", () => ({
   getKeyStatus: mockGetKeyStatus,
 }));
 
-const keysDir = path.join(__dirname, "../../../keys");
 const receiptService = require("../receiptService");
 
-describe("receiptService", () => {
-  beforeAll(() => {
-    expect(fs.existsSync(path.join(keysDir, "private.pem"))).toBe(true);
-    expect(fs.existsSync(path.join(keysDir, "public.pem"))).toBe(true);
+function generateReceiptKeyPair() {
+  return crypto.generateKeyPairSync("ec", {
+    namedCurve: "secp521r1",
+    publicKeyEncoding: { type: "spki", format: "pem" },
+    privateKeyEncoding: { type: "pkcs8", format: "pem" },
   });
+}
 
+describe("receiptService", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetActiveSigningKey.mockResolvedValue(null);
@@ -46,9 +57,10 @@ describe("receiptService", () => {
     last4: "4242",
   };
 
-  test("creates a three-part JWS with legacy key version 1", async () => {
+  test("creates a three-part ES512 JWS with legacy key version 1", async () => {
     const jws = await receiptService.createSignedReceipt(samplePayload);
     expect(jws.split(".")).toHaveLength(3);
+    expect(jwt.decode(jws, { complete: true }).header.alg).toBe("ES512");
 
     const decoded = await receiptService.verifyReceipt(jws);
     expect(decoded).toMatchObject({
@@ -64,13 +76,12 @@ describe("receiptService", () => {
     expect(decoded.exp).toBeUndefined();
   });
 
-  test("keeps old receipts without key_version verifiable after rotation support", async () => {
-    const privateKey = fs.readFileSync(path.join(keysDir, "private.pem"));
+  test("keeps ES512 receipts without key_version verifiable after rotation support", async () => {
     const legacyReceipt = jwt.sign(
       { type: "payment_receipt", ...samplePayload },
-      privateKey,
+      legacyKeys.privateKey,
       {
-        algorithm: "RS256",
+        algorithm: "ES512",
         issuer: "payment-system",
         audience: "payment-receipt",
       },
@@ -82,11 +93,7 @@ describe("receiptService", () => {
   });
 
   test("uses stored public key selected by key_version after rotation", async () => {
-    const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", {
-      modulusLength: 2048,
-      publicKeyEncoding: { type: "spki", format: "pem" },
-      privateKeyEncoding: { type: "pkcs8", format: "pem" },
-    });
+    const { publicKey, privateKey } = generateReceiptKeyPair();
     mockGetActiveSigningKey.mockResolvedValueOnce({
       keyVersion: 2,
       privateKey,
@@ -114,12 +121,11 @@ describe("receiptService", () => {
   });
 
   test("rejects a malformed key_version before querying the key store", async () => {
-    const privateKey = fs.readFileSync(path.join(keysDir, "private.pem"));
     const receipt = jwt.sign(
       { type: "payment_receipt", ...samplePayload, key_version: "invalid" },
-      privateKey,
+      legacyKeys.privateKey,
       {
-        algorithm: "RS256",
+        algorithm: "ES512",
         issuer: "payment-system",
         audience: "payment-receipt",
       },

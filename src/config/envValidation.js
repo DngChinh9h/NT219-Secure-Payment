@@ -1,22 +1,13 @@
 "use strict";
 
-const fs = require("fs");
-const path = require("path");
-
-const DEFAULT_PRIVATE_KEY_PATH = path.join(__dirname, "../../keys/private.pem");
-const DEFAULT_PUBLIC_KEY_PATH = path.join(__dirname, "../../keys/public.pem");
+const {
+  DEFAULT_PRIVATE_KEY_PATH,
+  DEFAULT_PUBLIC_KEY_PATH,
+  getJwtKeyConfigStatus,
+} = require("../crypto/keyLoader");
 
 function isPresent(value) {
   return typeof value === "string" && value.trim().length > 0;
-}
-
-function isReadableFile(filePath) {
-  try {
-    fs.accessSync(filePath, fs.constants.R_OK);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function getConfiguredOrigins(env = process.env) {
@@ -30,18 +21,15 @@ function getRuntimeConfigStatus({
   env = process.env,
   checkKeyFiles = true,
 } = {}) {
-  const jwtPrivateKeyPath =
-    env.JWT_PRIVATE_KEY_PATH || DEFAULT_PRIVATE_KEY_PATH;
-  const jwtPublicKeyPath =
-    env.JWT_PUBLIC_KEY_PATH || DEFAULT_PUBLIC_KEY_PATH;
+  const jwtKeys = checkKeyFiles
+    ? getJwtKeyConfigStatus(env)
+    : { privateKeyConfigured: true, publicKeyConfigured: true };
   const configuredOrigins = getConfiguredOrigins(env);
   const corsWildcardConfigured = configuredOrigins.includes("*");
   const checks = {
     databaseUrlPresent: isPresent(env.DATABASE_URL),
-    jwtPrivateKeyReadable:
-      !checkKeyFiles || isReadableFile(jwtPrivateKeyPath),
-    jwtPublicKeyReadable:
-      !checkKeyFiles || isReadableFile(jwtPublicKeyPath),
+    jwtPrivateKeyConfigured: jwtKeys.privateKeyConfigured,
+    jwtPublicKeyConfigured: jwtKeys.publicKeyConfigured,
     stripeSecretKeyPresent: isPresent(env.STRIPE_SECRET_KEY),
     stripeWebhookSecretPresent: isPresent(env.STRIPE_WEBHOOK_SECRET),
     stripePublishableKeyPresent: isPresent(env.STRIPE_PUBLISHABLE_KEY),
@@ -55,8 +43,10 @@ function getRuntimeConfigStatus({
   };
   const labels = {
     databaseUrlPresent: "DATABASE_URL",
-    jwtPrivateKeyReadable: "JWT_PRIVATE_KEY_PATH readable",
-    jwtPublicKeyReadable: "JWT_PUBLIC_KEY_PATH readable",
+    jwtPrivateKeyConfigured:
+      "JWT private key configured via path, base64, or raw env",
+    jwtPublicKeyConfigured:
+      "JWT public key configured via path, base64, or raw env",
     stripeSecretKeyPresent: "STRIPE_SECRET_KEY",
     stripeWebhookSecretPresent: "STRIPE_WEBHOOK_SECRET",
     stripePublishableKeyPresent: "STRIPE_PUBLISHABLE_KEY",
