@@ -75,7 +75,7 @@ describe("securityEvidenceService", () => {
       availableKeyVersions: [1, 2],
       receiptSigning: {
         enabled: true,
-        algorithm: "RS256",
+        algorithm: "ES512",
         currentKeyVersion: 2,
       },
       auditChain: {

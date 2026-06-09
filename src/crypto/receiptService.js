@@ -1,30 +1,20 @@
 "use strict";
 
 const jwt = require("jsonwebtoken");
-const fs = require("fs");
-const path = require("path");
 const signingKeyService = require("./receiptSigningKeyService");
+const { loadJwtSigningKeys } = require("./keyLoader");
 
-const privatePath =
-  process.env.JWT_PRIVATE_KEY_PATH ||
-  path.join(__dirname, "../../keys/private.pem");
+let PRIVATE_KEY;
+let PUBLIC_KEY;
 
-const publicPath =
-  process.env.JWT_PUBLIC_KEY_PATH ||
-  path.join(__dirname, "../../keys/public.pem");
-
-let PRIVATE_KEY, PUBLIC_KEY;
 try {
-  PRIVATE_KEY = fs.readFileSync(privatePath);
-  PUBLIC_KEY = fs.readFileSync(publicPath);
+  const keys = loadJwtSigningKeys();
+  PRIVATE_KEY = keys.privateKey;
+  PUBLIC_KEY = keys.publicKey;
 } catch (err) {
-  console.error("Receipt service: RSA keys not found:", err.message);
+  console.error("Receipt service: ES512 signing keys not found:", err.message);
 }
 
-/**
- * Tạo JWS receipt cho transaction đã thành công
- * Dùng RS256, KHÔNG có expiresIn (receipt vĩnh viễn)
- */
 async function createSignedReceipt({ txId, orderId, userId, amount, currency, last4 }) {
   const activeKey = await signingKeyService.getActiveSigningKey();
   const privateKey = activeKey?.privateKey || PRIVATE_KEY;
@@ -47,16 +37,13 @@ async function createSignedReceipt({ txId, orderId, userId, amount, currency, la
   };
 
   return jwt.sign(payload, privateKey, {
-    algorithm: "RS256",
+    algorithm: "ES512",
     issuer: "payment-system",
     audience: "payment-receipt",
     keyid: String(keyVersion),
   });
 }
 
-/**
- * Verify JWS receipt
- */
 async function verifyReceipt(jws) {
   const decoded = jwt.decode(jws, { complete: true });
 
@@ -84,7 +71,7 @@ async function verifyReceipt(jws) {
   }
 
   return jwt.verify(jws, publicKey, {
-    algorithms: ["RS256"],
+    algorithms: ["ES512"],
     issuer: "payment-system",
     audience: "payment-receipt",
   });

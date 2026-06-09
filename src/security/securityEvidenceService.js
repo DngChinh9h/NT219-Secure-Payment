@@ -43,7 +43,7 @@ async function getSecurityEvidence() {
     ...receiptSigningStatus,
     receiptSigning: {
       enabled: receiptSigningStatus.receiptSigningEnabled,
-      algorithm: "RS256",
+      algorithm: "ES512",
       currentKeyVersion: receiptSigningStatus.currentKeyVersion,
       keyRotationEnabled: receiptSigningStatus.keyRotationEnabled,
       availableKeyVersions: receiptSigningStatus.availableKeyVersions,

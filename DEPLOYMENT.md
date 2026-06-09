@@ -34,7 +34,7 @@ STRIPE_PUBLISHABLE_KEY=<Stripe publishable key>
 STRIPE_WEBHOOK_SECRET=<Stripe webhook signing secret>
 ```
 
-Store the RSA PEM files as Render Secret Files at the paths configured above.
+Store ES512 ECDSA P-521 PEM files as Render Secret Files at the paths configured above.
 Do not expose secret keys through frontend variables.
 
 Optional backend variables:
@@ -73,13 +73,13 @@ ADMIN_RESET_PASSWORD=false
 Deploy the separate frontend repository to Vercel. Configure:
 
 ```text
-VITE_API_BASE_URL=https://your-backend.onrender.com
+VITE_API_BASE_URL=https://api.example.com
 ```
 
 The frontend can read the Stripe publishable key from:
 
 ```text
-GET https://your-backend.onrender.com/api/config/public
+GET https://api.example.com/api/config/public
 ```
 
 Add the exact Vercel origin to backend `CORS_ORIGINS`. Multiple origins are
@@ -91,7 +91,7 @@ production-like test, include `http://localhost:5173` explicitly.
 Create a Stripe webhook endpoint:
 
 ```text
-https://your-backend.onrender.com/api/payments/webhook
+https://api.example.com/api/payments/webhook
 ```
 
 Subscribe to:
@@ -124,7 +124,7 @@ GET /api/admin/security/risk-evidence
 Run the final black-box suite:
 
 ```powershell
-$env:API_BASE_URL="https://your-backend.onrender.com"
+$env:API_BASE_URL="https://api.example.com"
 $env:E2E_ADMIN_EMAIL="admin@example.com"
 $env:E2E_ADMIN_PASSWORD="<admin-password>"
 npm run e2e:production
