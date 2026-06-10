@@ -56,14 +56,8 @@ app.use(securityHeaders);
 app.use(sensitiveNoStore);
 app.use(cors(createCorsOptions()));
 
-app.post(
-  "/api/payments/webhook",
-  express.raw({ type: "application/json" }),
-  require("./payments/webhookHandler").handleWebhook
-);
-
 app.use((req, res, next) => {
-  if (req.originalUrl === "/api/payments/webhook") return next();
+  if (req.path === "/api/payments/webhook") return next();
   express.json()(req, res, next);
 });
 
