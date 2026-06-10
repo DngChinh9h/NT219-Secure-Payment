@@ -52,6 +52,23 @@ describe("webhookHandler", () => {
     jest.clearAllMocks();
   });
 
+  test("rejects webhook requests without Stripe-Signature", async () => {
+    const req = {
+      headers: {},
+      body: Buffer.from("{}"),
+    };
+    const res = mockResponse();
+
+    await handleWebhook(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      error: "Missing Stripe-Signature header",
+    });
+    expect(mockConstructEvent).not.toHaveBeenCalled();
+    expect(mockRecordReceivedEvent).not.toHaveBeenCalled();
+  });
+
   test("returns 200 for duplicate processed event without reprocessing", async () => {
     mockConstructEvent.mockReturnValueOnce({
       id: "evt_processed",

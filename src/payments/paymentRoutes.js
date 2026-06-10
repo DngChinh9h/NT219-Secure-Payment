@@ -9,6 +9,13 @@ const {
   paymentCreateIntentLimiter,
 } = require('../gateway/rateLimiter');
 const { createPaymentIntent, syncPayment, refundPayment } = require('./paymentController');
+const { handleWebhook } = require('./webhookHandler');
+
+router.post(
+  '/webhook',
+  express.raw({ type: 'application/json' }),
+  handleWebhook
+);
 
 router.post(
   '/create-intent',
