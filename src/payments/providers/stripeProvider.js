@@ -5,10 +5,10 @@ require("dotenv").config();
 const Stripe = require("stripe");
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
-async function createPayment({ order, paymentMethodToken }) {
+async function createPayment({ order, paymentMethodToken, idempotencyKey }) {
   const paymentIntent = await stripe.paymentIntents.create({
     amount: Number(order.total_amount),
-    currency: "vnd",
+    currency: order.currency || "vnd",
     payment_method: paymentMethodToken,
     payment_method_types: ["card"],
     confirmation_method: "manual",
@@ -16,8 +16,10 @@ async function createPayment({ order, paymentMethodToken }) {
     metadata: {
       orderId: order.id,
       userId: order.user_id,
+      payerUserId: order.user_id,
+      merchantId: order.merchant_id,
     },
-  });
+  }, idempotencyKey ? { idempotencyKey } : undefined);
 
   return {
     provider: "stripe",

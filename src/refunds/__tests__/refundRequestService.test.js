@@ -249,6 +249,7 @@ describe("refundRequestService admin workflow", () => {
       reason: "requested_by_customer",
       userId: adminUserId,
       role: "admin",
+      idempotencyKey: requestId,
       metadata: {
         refundRequestId: requestId,
       },

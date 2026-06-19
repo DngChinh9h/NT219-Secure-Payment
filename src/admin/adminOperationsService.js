@@ -14,6 +14,8 @@ function mapOrder(row) {
     amount: toNumber(row.total_amount),
     status: row.status,
     provider: row.provider || null,
+    merchantId: row.merchant_id || null,
+    merchantName: row.merchant_name || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     transactionCount: toNumber(row.transaction_count),
@@ -26,6 +28,8 @@ function mapTransaction(row) {
     id: row.id,
     orderId: row.order_id,
     customerEmail: row.customer_email,
+    merchantId: row.merchant_id || null,
+    merchantName: row.merchant_name || null,
     provider: row.provider || null,
     provider_payment_id: row.provider_payment_id || null,
     amount: toNumber(row.amount),
@@ -52,11 +56,13 @@ function mapProviderEvent(row) {
 async function getOrders() {
   const result = await db.query(
     `SELECT o.id, u.email AS customer_email, o.total_amount, o.status,
-            o.payment_provider AS provider, o.created_at, o.updated_at,
+            o.payment_provider AS provider, o.merchant_id, m.display_name AS merchant_name,
+            o.created_at, o.updated_at,
             COUNT(DISTINCT t.id)::INTEGER AS transaction_count,
             latest_refund.status AS refund_status
      FROM orders o
      JOIN users u ON u.id = o.user_id
+     LEFT JOIN merchants m ON m.id = o.merchant_id
      LEFT JOIN transactions t ON t.order_id = o.id
      LEFT JOIN LATERAL (
        SELECT rr.status
@@ -65,7 +71,7 @@ async function getOrders() {
        ORDER BY rr.created_at DESC
        LIMIT 1
      ) latest_refund ON TRUE
-     GROUP BY o.id, u.email, latest_refund.status
+     GROUP BY o.id, u.email, m.display_name, latest_refund.status
      ORDER BY o.created_at DESC
      LIMIT 200`,
   );
@@ -76,12 +82,14 @@ async function getOrders() {
 async function getTransactions() {
   const result = await db.query(
     `SELECT t.id, t.order_id, u.email AS customer_email,
+            t.merchant_id, m.display_name AS merchant_name,
             COALESCE(t.provider, o.payment_provider) AS provider,
             COALESCE(t.provider_payment_id, t.stripe_payment_id) AS provider_payment_id,
             t.amount, t.status, t.refund_id, t.refunded_at, t.created_at
      FROM transactions t
-     JOIN users u ON u.id = t.user_id
+     JOIN users u ON u.id = t.payer_user_id
      JOIN orders o ON o.id = t.order_id
+     LEFT JOIN merchants m ON m.id = t.merchant_id
      ORDER BY t.created_at DESC
      LIMIT 200`,
   );

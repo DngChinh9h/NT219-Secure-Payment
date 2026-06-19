@@ -69,19 +69,29 @@ describe("webhookEventService", () => {
     expect(mockQuery.mock.calls[0][0]).toContain("processed_at = NOW()");
   });
 
-  test("markFailed stores error message", async () => {
+  test("markFailed stores error message and mismatch reason", async () => {
     mockQuery.mockResolvedValueOnce({
       rowCount: 1,
-      rows: [{ processing_status: "failed", error_message: "boom" }],
+      rows: [{
+        processing_status: "failed",
+        error_message: "boom",
+        mismatch_reason: "amount",
+      }],
     });
 
     const result = await webhookEventService.markFailed({
       provider: "stripe",
       providerEventId: "evt_1",
       errorMessage: "boom",
+      mismatchReason: "amount",
     });
 
     expect(result.error_message).toBe("boom");
-    expect(mockQuery.mock.calls[0][1]).toEqual(["stripe", "evt_1", "boom"]);
+    expect(mockQuery.mock.calls[0][1]).toEqual([
+      "stripe",
+      "evt_1",
+      "boom",
+      "amount",
+    ]);
   });
 });

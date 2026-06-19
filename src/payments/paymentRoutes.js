@@ -3,7 +3,7 @@ const express = require('express');
 const router  = express.Router();
 const { authenticate }   = require('../gateway/authMiddleware');
 const { requireAdmin } = require('../gateway/authzMiddleware');
-const { validate, paymentSchema } = require('../crypto');
+const { validate, paymentSchema, refundPaymentSchema } = require('../crypto');
 const {
   adminRefundLimiter,
   paymentCreateIntentLimiter,
@@ -26,6 +26,13 @@ router.post(
 );
 
 router.post('/sync/:paymentIntentId', authenticate, syncPayment);
-router.post('/refund', adminRefundLimiter, authenticate, requireAdmin, refundPayment);
+router.post(
+  '/refund',
+  adminRefundLimiter,
+  authenticate,
+  requireAdmin,
+  validate(refundPaymentSchema),
+  refundPayment
+);
 
 module.exports = router;

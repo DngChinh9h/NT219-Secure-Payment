@@ -75,7 +75,7 @@ async function verifyReceipt(req, res) {
       eventType: "receipt_verified",
       actorUserId: req.user.userId,
       targetType: "transaction",
-      targetId: payload.txId || null,
+      targetId: payload.transaction_id || payload.txId || null,
       metadata: { valid: true },
       ipAddress: req.ip,
     });
@@ -107,6 +107,14 @@ async function rotateReceiptSigningKey(req, res) {
     const status = await signingKeyService.rotateSigningKey();
     await auditService.log({
       eventType: "receipt_signing_key_rotated",
+      actorUserId: req.user.userId,
+      targetType: "receipt_signing_key",
+      targetId: String(status.activeKeyVersion),
+      metadata: { keyVersion: status.activeKeyVersion },
+      ipAddress: req.ip,
+    });
+    await auditService.log({
+      eventType: "key_rotation",
       actorUserId: req.user.userId,
       targetType: "receipt_signing_key",
       targetId: String(status.activeKeyVersion),

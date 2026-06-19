@@ -1,26 +1,21 @@
-/**
-     * Entry point duy nhất cho Crypto module
-     * TV1 và TV3 chỉ import từ file này
-     *
-     * Usage:
-     *   const { hmacSign, aesEncrypt, verifyJWT, validate, loginSchema } = require('../crypto');
-     */
-    module.exports = {
-      // HMAC
-      ...require('./hmacHelper'),     // hmacSign, hmacVerify
-    
-      // AES
-      ...require('./aesHelper'),      // aesEncrypt, aesDecrypt
-    
-      // JWT
-      ...require('./jwtHelper'),      // signJWT, verifyJWT
-    
-      // Nonce
-      ...require('./nonceValidator'), // validateNonce
-    
-      // Input Validation
-      ...require('./inputValidator'), // validate, registerSchema, loginSchema, orderSchema, paymentSchema
-    
-      // Receipt JWS
-      ...require('./receiptService'), // createSignedReceipt, verifyReceipt
-    };
+"use strict";
+
+module.exports = {
+  // HMAC-SHA256 message authentication code helpers.
+  ...require("./hmacHelper"),
+
+  // AES-256-GCM data encryption helpers.
+  ...require("./aesHelper"),
+
+  // JWT helpers.
+  ...require("./jwtHelper"),
+
+  // Stateless timestamp helper; replay state is persisted in request_nonces.
+  ...require("./nonceValidator"),
+
+  // Input validation.
+  ...require("./inputValidator"),
+
+  // ES512 JWS receipt signing and verification.
+  ...require("./receiptService"),
+};

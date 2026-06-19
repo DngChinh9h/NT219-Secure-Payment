@@ -49,6 +49,29 @@ async function getMyRefundRequests(req, res) {
   }
 }
 
+async function getMerchantRefundRequests(req, res) {
+  try {
+    if (!["merchant", "admin"].includes(req.user.role)) {
+      await auditService.log({
+        eventType: "rbac_violation",
+        actorUserId: req.user.userId,
+        targetType: "refund_requests",
+        metadata: { route: "merchant_refunds", role: req.user.role },
+        ipAddress: req.ip,
+      });
+      return res.status(403).json({ error: "Requires role: merchant or admin" });
+    }
+
+    const requests = await refundRequestService.getMerchantRefundRequests({
+      userId: req.user.userId,
+      role: req.user.role,
+    });
+    return res.status(200).json({ refundRequests: requests });
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to get merchant refund requests" });
+  }
+}
+
 async function cancelRefundRequest(req, res) {
   try {
     const request = await refundRequestService.cancelRefundRequest({
@@ -172,6 +195,7 @@ module.exports = {
   approveRefundRequest,
   cancelRefundRequest,
   createRefundRequest,
+  getMerchantRefundRequests,
   getAllRefundRequests,
   getMyRefundRequests,
   rejectRefundRequest,

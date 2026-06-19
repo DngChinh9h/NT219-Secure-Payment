@@ -1,7 +1,23 @@
 node_modules/
-.env
-.DS_Store
-keys/*.pem
-*.log
 coverage/
 
+.env
+.env.*
+!.env.example
+
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+runtime-output/
+
+*.key
+*.pem
+*.p12
+*.pfx
+keys/
+certs/
+local-secrets/
+
+.DS_Store

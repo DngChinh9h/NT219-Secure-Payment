@@ -1,37 +1,39 @@
-process.env.HMAC_SECRET = 'test-secret-32-chars-minimum!!!x';
-const { hmacSign, hmacVerify } = require('../hmacHelper');
+"use strict";
 
-describe('HMAC Helper', () => {
-  test('sign tạo ra hex string', () => {
-    const sig = hmacSign({ amount: 100 });
-    expect(typeof sig).toBe('string');
-    expect(sig.length).toBe(64); // SHA256 = 32 bytes = 64 hex chars
-    expect(sig).toMatch(/^[a-f0-9]+$/);
+process.env.HMAC_SECRET = "test-secret-32-chars-minimum!!!x";
+const { computeMac, verifyMac, hmacSign, hmacVerify } = require("../hmacHelper");
+
+describe("HMAC message authentication code helper", () => {
+  test("computeMac returns SHA-256 hex MAC", () => {
+    const mac = computeMac({ amount: 100 });
+    expect(typeof mac).toBe("string");
+    expect(mac).toHaveLength(64);
+    expect(mac).toMatch(/^[a-f0-9]+$/);
   });
 
-  test('sign object và string tương đương khi stringify', () => {
-    const obj = { orderId: 'abc', amount: 100 };
-    const sig1 = hmacSign(obj);
-    const sig2 = hmacSign(JSON.stringify(obj));
-    expect(sig1).toBe(sig2);
+  test("computeMac object and JSON string are equivalent for same bytes", () => {
+    const obj = { orderId: "abc", amount: 100 };
+    expect(computeMac(obj)).toBe(computeMac(JSON.stringify(obj)));
   });
 
-  test('verify đúng payload → true', () => {
-    const payload = { orderId: 'test-123', amount: 50000, userId: 'u1' };
-    const sig = hmacSign(payload);
-    expect(hmacVerify(payload, sig)).toBe(true);
+  test("verifyMac returns true for unchanged payload", () => {
+    const payload = { orderId: "test-123", amount: 50000, userId: "u1" };
+    const mac = computeMac(payload);
+    expect(verifyMac(payload, mac)).toBe(true);
   });
 
-  test('payload bị sửa → false', () => {
-    const sig = hmacSign({ amount: 100 });
-    expect(hmacVerify({ amount: 999 }, sig)).toBe(false);
+  test("payload tamper returns false", () => {
+    const mac = computeMac({ amount: 100 });
+    expect(verifyMac({ amount: 999 }, mac)).toBe(false);
   });
 
-  test('signature giả → false', () => {
-    expect(hmacVerify({ amount: 100 }, 'a'.repeat(64))).toBe(false);
+  test("fake MAC or wrong length returns false", () => {
+    expect(verifyMac({ amount: 100 }, "a".repeat(64))).toBe(false);
+    expect(verifyMac({ amount: 100 }, "tooshort")).toBe(false);
   });
 
-  test('signature sai length → false (không crash)', () => {
-    expect(hmacVerify({ amount: 100 }, 'tooshort')).toBe(false);
+  test("legacy hmacSign/hmacVerify aliases remain compatible", () => {
+    const payload = { ok: true };
+    expect(hmacVerify(payload, hmacSign(payload))).toBe(true);
   });
 });

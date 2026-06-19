@@ -57,6 +57,7 @@ async function createRefundRequest({ orderId, reason, details = null, userId }) 
     `SELECT *
      FROM transactions
      WHERE order_id = $1
+       AND status = 'success'
      ORDER BY created_at DESC
      LIMIT 1`,
     [orderId],
@@ -94,16 +95,17 @@ async function createRefundRequest({ orderId, reason, details = null, userId }) 
   try {
     const insertResult = await db.query(
       `INSERT INTO refund_requests
-        (order_id, transaction_id, user_id, amount, provider,
+        (order_id, transaction_id, user_id, payer_user_id, merchant_id, amount, provider,
          provider_payment_id, reason, details, status, admin_decision,
          provider_status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending_review',
+       VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9, 'pending_review',
                'pending', 'not_started')
        RETURNING *`,
       [
         order.id,
         tx.id,
         userId,
+        tx.merchant_id || order.merchant_id,
         tx.amount,
         tx.provider || order.payment_provider || "stripe",
         tx.provider_payment_id || tx.stripe_payment_id || null,
@@ -128,6 +130,27 @@ async function getMyRefundRequests(userId) {
      WHERE user_id = $1
      ORDER BY created_at DESC`,
     [userId],
+  );
+
+  return result.rows;
+}
+
+async function getMerchantRefundRequests({ userId, role }) {
+  const params = [];
+  let where = "";
+
+  if (role !== "admin") {
+    params.push(userId);
+    where = "WHERE m.user_id = $1";
+  }
+
+  const result = await db.query(
+    `SELECT rr.*
+     FROM refund_requests rr
+     JOIN merchants m ON m.id = rr.merchant_id
+     ${where}
+     ORDER BY rr.created_at DESC`,
+    params,
   );
 
   return result.rows;
@@ -257,6 +280,7 @@ async function approveRefundRequest({
       reason: request.reason,
       userId: adminUserId,
       role: "admin",
+      idempotencyKey: request.id,
       metadata: {
         refundRequestId: request.id,
       },
@@ -321,6 +345,7 @@ module.exports = {
   createRefundRequest,
   findRequestById,
   getAllRefundRequests,
+  getMerchantRefundRequests,
   getMyRefundRequests,
   rejectRefundRequest,
 };

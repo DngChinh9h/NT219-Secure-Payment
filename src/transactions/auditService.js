@@ -2,7 +2,7 @@
 
 const crypto = require("crypto");
 const db = require("../db");
-const { hmacSign } = require("../crypto");
+const { computeMac } = require("../crypto");
 
 const CHAIN_VERSION = "sha256_v1";
 const GENESIS_HASH = "GENESIS";
@@ -128,7 +128,7 @@ async function log({
       metadata: normalizedMetadata,
       createdAt,
     });
-    const hmacSig = hmacSign({
+    const hmacSig = computeMac({
       eventType,
       userId: normalizedActorUserId,
       payload: normalizedMetadata,
@@ -222,7 +222,7 @@ async function getLatestEvidenceTimestamps(eventTypes) {
 }
 
 function verifyLogIntegrity(logRow) {
-  const expectedSig = hmacSign({
+  const expectedSig = computeMac({
     eventType: logRow.event_type,
     userId: logRow.user_id,
     payload: logRow.payload,
@@ -249,7 +249,7 @@ function verifySha256Row(row) {
 }
 
 function verifyLegacyRow(row) {
-  return hmacSign(
+  return computeMac(
     buildHashPayload({
       eventType: row.event_type,
       userId: row.user_id,

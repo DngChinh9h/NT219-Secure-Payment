@@ -17,6 +17,16 @@ function getConfiguredOrigins(env = process.env) {
     .filter(Boolean);
 }
 
+function isValidKmsMasterKey(value) {
+  if (!isPresent(value)) return false;
+  if (/^[a-fA-F0-9]{64}$/.test(value.trim())) return true;
+  try {
+    return Buffer.from(value.trim(), "base64").length === 32;
+  } catch {
+    return false;
+  }
+}
+
 function getRuntimeConfigStatus({
   env = process.env,
   checkKeyFiles = true,
@@ -37,9 +47,7 @@ function getRuntimeConfigStatus({
     corsWildcardRejected:
       env.NODE_ENV !== "production" || !corsWildcardConfigured,
     hmacSecretPresent: isPresent(env.HMAC_SECRET),
-    kmsMasterKeyPresent: /^[a-fA-F0-9]{64}$/.test(
-      env.KMS_MASTER_KEY || "",
-    ),
+    kmsMasterKeyPresent: isValidKmsMasterKey(env.KMS_MASTER_KEY),
   };
   const labels = {
     databaseUrlPresent: "DATABASE_URL",
@@ -53,7 +61,7 @@ function getRuntimeConfigStatus({
     corsOriginsConfigured: "CORS_ORIGINS",
     corsWildcardRejected: "CORS_ORIGINS without wildcard in production",
     hmacSecretPresent: "HMAC_SECRET",
-    kmsMasterKeyPresent: "KMS_MASTER_KEY as 64 hex chars",
+    kmsMasterKeyPresent: "KMS_MASTER_KEY as 32 bytes encoded hex or base64",
   };
   const missing = Object.entries(checks)
     .filter(([, present]) => !present)
@@ -122,6 +130,7 @@ module.exports = {
   getConfiguredOrigins,
   getRuntimeConfigStatus,
   isPresent,
+  isValidKmsMasterKey,
   logStartupDiagnostics,
   validateStartupConfig,
 };

@@ -1,8 +1,9 @@
-'use strict';
-const paymentService = require('./paymentService');
-const auditService   = require('../transactions/auditService');
-const { validateNonce } = require('../crypto');
-const { checkVelocity, recordFailure } = require('./velocityCheck');
+"use strict";
+
+const paymentService = require("./paymentService");
+const auditService = require("../transactions/auditService");
+const { consumeNonce } = require("../security/requestNonceService");
+const { checkVelocity, recordFailure } = require("./velocityCheck");
 
 async function createPaymentIntent(req, res) {
   const {
@@ -13,28 +14,42 @@ async function createPaymentIntent(req, res) {
     amount,
     nonce,
     timestamp,
+    idempotencyKey,
   } = req.body;
 
-  // 1. Nonce / anti-replay check
-  const nonceCheck = validateNonce(nonce, timestamp);
-  if (!nonceCheck.valid) {
-    await auditService.log({
-      eventType: 'PAYMENT_REPLAY_DETECTED',
-      userId:    req.user.userId,
-      ipAddress: req.ip,
-      payload:   { reason: nonceCheck.reason }
+  try {
+    await consumeNonce({
+      userId: req.user.userId,
+      nonce,
+      timestamp,
+      requestType: "payment_create",
+      requestBody: {
+        orderId,
+        provider: provider || "stripe",
+        amount: amount ?? null,
+        idempotencyKey: idempotencyKey || null,
+      },
     });
-    return res.status(400).json({ error: nonceCheck.reason });
+  } catch (err) {
+    await auditService.log({
+      eventType: "payment_replay_detected",
+      actorUserId: req.user.userId,
+      targetType: "order",
+      targetId: orderId || null,
+      ipAddress: req.ip,
+      metadata: { reason: err.message },
+    });
+    return res.status(err.statusCode || 400).json({ error: err.message });
   }
 
-  // 2. Velocity check — block after too many failures
   const velocity = checkVelocity(req.user.userId);
   if (velocity.blocked) {
     await auditService.log({
-      eventType: 'VELOCITY_BLOCK',
-      userId:    req.user.userId,
+      eventType: "velocity_block",
+      actorUserId: req.user.userId,
+      targetType: "payment",
       ipAddress: req.ip,
-      payload:   { reason: velocity.reason }
+      metadata: { reason: velocity.reason },
     });
     return res.status(429).json({ error: velocity.reason });
   }
@@ -46,77 +61,62 @@ async function createPaymentIntent(req, res) {
       paymentToken,
       stripeToken,
       amount,
-      userId: req.user.userId
+      idempotencyKey: idempotencyKey || nonce,
+      userId: req.user.userId,
     });
 
     await auditService.log({
-      eventType: 'PAYMENT_ATTEMPT',
-      userId:    req.user.userId,
-      ipAddress: req.ip,
-      payload:   {
-        orderId,
-        provider: result.provider,
-        paymentIntentId: result.paymentIntentId
-      }
-    });
-    await auditService.log({
-      eventType: 'payment_intent_created',
-      userId:    req.user.userId,
-      ipAddress: req.ip,
-      payload:   {
-        orderId,
-        provider: result.provider,
-        paymentIntentId: result.paymentIntentId,
-        status: result.status
-      }
-    });
-    await auditService.log({
-      eventType: 'payment_created',
+      eventType: "payment_created",
       actorUserId: req.user.userId,
-      targetType: 'order',
+      targetType: "order",
       targetId: orderId,
       ipAddress: req.ip,
       metadata: {
         provider: result.provider,
         providerPaymentId: result.paymentIntentId,
-        status: result.status
-      }
+        paymentAttemptId: result.paymentAttemptId,
+        status: result.status,
+        amount: result.amount,
+        currency: result.currency,
+      },
     });
-    if (result.provider === 'mock_bank' && result.status === 'succeeded') {
+
+    if (result.transaction) {
       await auditService.log({
-        eventType: 'payment_succeeded',
+        eventType: "transaction_success",
         actorUserId: req.user.userId,
-        targetType: 'order',
-        targetId: orderId,
+        targetType: "transaction",
+        targetId: result.transaction.id,
         ipAddress: req.ip,
-        metadata: { providerPaymentId: result.paymentIntentId }
+        metadata: {
+          orderId,
+          providerPaymentId: result.paymentIntentId,
+        },
       });
       await auditService.log({
-        eventType: 'receipt_issued',
+        eventType: "receipt_issued",
         actorUserId: req.user.userId,
-        targetType: 'order',
-        targetId: orderId,
+        targetType: "transaction",
+        targetId: result.transaction.id,
         ipAddress: req.ip,
-        metadata: { providerPaymentId: result.paymentIntentId }
+        metadata: {
+          receiptId: result.transaction.receipt_id,
+          merchantId: result.transaction.merchant_id,
+        },
       });
     }
 
     return res.status(200).json(result);
   } catch (err) {
-    // Record failure for velocity tracking
     recordFailure(req.user.userId);
 
     await auditService.log({
-      eventType: 'PAYMENT_FAIL',
-      userId:    req.user?.userId,
+      eventType: "payment_failed",
+      actorUserId: req.user?.userId,
+      targetType: "order",
+      targetId: orderId || null,
       ipAddress: req.ip,
-      payload:   { error: err.message, orderId }
-    });
-    await auditService.log({
-      eventType: 'payment_failed',
-      userId:    req.user?.userId,
-      ipAddress: req.ip,
-      payload:   { error: err.message, orderId }
+      metadata: { error: err.message },
     });
 
     const status = err.statusCode || 400;
@@ -129,18 +129,19 @@ async function syncPayment(req, res) {
     const result = await paymentService.syncPayment({
       paymentIntentId: req.params.paymentIntentId,
       userId: req.user.userId,
-      role: req.user.role
+      role: req.user.role,
     });
 
     await auditService.log({
-      eventType: 'payment_synced',
-      userId: req.user.userId,
+      eventType: "payment_synced",
+      actorUserId: req.user.userId,
+      targetType: "payment",
+      targetId: req.params.paymentIntentId,
       ipAddress: req.ip,
-      payload: {
-        paymentIntentId: req.params.paymentIntentId,
+      metadata: {
         providerStatus: result.providerStatus,
-        orderStatus: result.orderStatus
-      }
+        orderStatus: result.orderStatus,
+      },
     });
 
     return res.status(200).json(result);
@@ -152,34 +153,39 @@ async function syncPayment(req, res) {
 
 async function refundPayment(req, res) {
   try {
-    const { transactionId, reason } = req.body || {};
-
-    if (!transactionId || !reason) {
-      return res.status(400).json({ error: "transactionId and reason are required" });
-    }
+    const {
+      transactionId,
+      reason,
+      amount,
+      idempotencyKey,
+      mockRefundOutcome,
+    } = req.body || {};
 
     const result = await paymentService.refundTransaction({
       transactionId,
       reason,
+      amount,
+      idempotencyKey,
+      mockRefundOutcome,
       userId: req.user.userId,
-      role: req.user.role
+      role: req.user.role,
     });
 
     await auditService.log({
       eventType:
-        result.providerStatus === 'succeeded'
-          ? 'provider_refund_succeeded'
-          : 'provider_refund_failed',
+        result.providerStatus === "succeeded"
+          ? "refund_approved"
+          : "refund_provider_pending_or_failed",
       actorUserId: req.user.userId,
-      targetType: 'transaction',
+      targetType: "transaction",
       targetId: transactionId,
       ipAddress: req.ip,
       metadata: {
-        transactionId,
         refundId: result.refundId,
         reason,
-        providerStatus: result.providerStatus
-      }
+        providerStatus: result.providerStatus,
+        amount: amount || null,
+      },
     });
 
     return res.status(200).json(result);
@@ -189,4 +195,8 @@ async function refundPayment(req, res) {
   }
 }
 
-module.exports = { createPaymentIntent, syncPayment, refundPayment };
+module.exports = {
+  createPaymentIntent,
+  refundPayment,
+  syncPayment,
+};

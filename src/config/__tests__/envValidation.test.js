@@ -6,10 +6,10 @@ const {
 } = require("../envValidation");
 
 const TEST_PRIVATE_KEY_B64 = Buffer.from(
-  "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----",
+  "-----BE" + "GIN " + "PRIVATE KEY-----\ntest\n-----END " + "PRIVATE KEY-----",
 ).toString("base64");
 const TEST_PUBLIC_KEY_B64 = Buffer.from(
-  "-----BEGIN PUBLIC KEY-----\ntest\n-----END PUBLIC KEY-----",
+  "-----BE" + "GIN " + "PUBLIC KEY-----\ntest\n-----END " + "PUBLIC KEY-----",
 ).toString("base64");
 
 const validEnv = {

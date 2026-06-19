@@ -49,11 +49,17 @@ describe("receiptService", () => {
   });
 
   const samplePayload = {
-    txId: "550e8400-e29b-41d4-a716-446655440000",
+    receiptId: "440e8400-e29b-41d4-a716-446655440000",
+    transactionId: "550e8400-e29b-41d4-a716-446655440000",
     orderId: "660e8400-e29b-41d4-a716-446655440000",
-    userId: "770e8400-e29b-41d4-a716-446655440000",
+    payerUserId: "770e8400-e29b-41d4-a716-446655440000",
+    merchantId: "880e8400-e29b-41d4-a716-446655440000",
+    provider: "stripe",
+    providerPaymentId: "pi_receipt_1",
     amount: 100000,
     currency: "vnd",
+    status: "PAID",
+    orderItemsHash: "abc123",
     last4: "4242",
   };
 
@@ -66,19 +72,31 @@ describe("receiptService", () => {
     expect(decoded).toMatchObject({
       type: "payment_receipt",
       key_version: 1,
-      txId: samplePayload.txId,
-      orderId: samplePayload.orderId,
-      userId: samplePayload.userId,
+      receipt_id: samplePayload.receiptId,
+      transaction_id: samplePayload.transactionId,
+      order_id: samplePayload.orderId,
+      payer_user_id: samplePayload.payerUserId,
+      merchant_id: samplePayload.merchantId,
+      provider_payment_id: samplePayload.providerPaymentId,
       amount: samplePayload.amount,
       currency: samplePayload.currency,
+      status: "PAID",
+      order_items_hash: "abc123",
       last4: samplePayload.last4,
     });
     expect(decoded.exp).toBeUndefined();
   });
 
   test("keeps ES512 receipts without key_version verifiable after rotation support", async () => {
+    const legacyPayload = {
+      txId: samplePayload.transactionId,
+      orderId: samplePayload.orderId,
+      userId: samplePayload.payerUserId,
+      amount: samplePayload.amount,
+      currency: samplePayload.currency,
+    };
     const legacyReceipt = jwt.sign(
-      { type: "payment_receipt", ...samplePayload },
+      { type: "payment_receipt", ...legacyPayload },
       legacyKeys.privateKey,
       {
         algorithm: "ES512",
@@ -88,7 +106,7 @@ describe("receiptService", () => {
     );
 
     const decoded = await receiptService.verifyReceipt(legacyReceipt);
-    expect(decoded.txId).toBe(samplePayload.txId);
+    expect(decoded.txId).toBe(samplePayload.transactionId);
     expect(decoded.key_version).toBeUndefined();
   });
 
@@ -110,11 +128,46 @@ describe("receiptService", () => {
     expect(jwt.decode(jws, { complete: true }).header.kid).toBe("2");
   });
 
-  test("rejects a tampered receipt", async () => {
+  test("old receipt still verifies after rotating to a newer active key", async () => {
+    const oldKeys = generateReceiptKeyPair();
+    const newKeys = generateReceiptKeyPair();
+
+    mockGetActiveSigningKey.mockResolvedValueOnce({
+      keyVersion: 2,
+      privateKey: oldKeys.privateKey,
+      publicKey: oldKeys.publicKey,
+    });
+    mockGetPublicKeyForVersion.mockImplementation(async (version) => {
+      if (version === 2) return oldKeys.publicKey;
+      if (version === 3) return newKeys.publicKey;
+      return null;
+    });
+    const oldReceipt = await receiptService.createSignedReceipt(samplePayload);
+
+    mockGetActiveSigningKey.mockResolvedValueOnce({
+      keyVersion: 3,
+      privateKey: newKeys.privateKey,
+      publicKey: newKeys.publicKey,
+    });
+    const newReceipt = await receiptService.createSignedReceipt(samplePayload);
+
+    await expect(receiptService.verifyReceipt(oldReceipt)).resolves.toMatchObject({
+      key_version: 2,
+    });
+    await expect(receiptService.verifyReceipt(newReceipt)).resolves.toMatchObject({
+      key_version: 3,
+    });
+  });
+
+  test.each([
+    ["amount", 999999],
+    ["merchant_id", "990e8400-e29b-41d4-a716-446655440000"],
+    ["order_id", "990e8400-e29b-41d4-a716-446655440000"],
+  ])("rejects a tampered %s", async (field, value) => {
     const jws = await receiptService.createSignedReceipt(samplePayload);
     const parts = jws.split(".");
     const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
-    payload.amount = 999999;
+    payload[field] = value;
     parts[1] = Buffer.from(JSON.stringify(payload)).toString("base64url");
 
     await expect(receiptService.verifyReceipt(parts.join("."))).rejects.toThrow();

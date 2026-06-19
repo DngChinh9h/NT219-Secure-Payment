@@ -16,7 +16,12 @@ function getKmsService() {
 }
 
 function hasConfiguredMasterKey() {
-  return /^[a-fA-F0-9]{64}$/.test(process.env.KMS_MASTER_KEY || "");
+  try {
+    const { decodeMasterKey } = getKmsService();
+    return Boolean(decodeMasterKey());
+  } catch {
+    return false;
+  }
 }
 
 function decryptPrivateKey(row) {

@@ -18,6 +18,7 @@ jest.mock("../auditService", () => ({
 }));
 
 const {
+  getMerchantTransactions,
   getMyTransactions,
   verifyAuditLogs,
   verifyReceipt,
@@ -69,13 +70,69 @@ describe("transactionController getMyTransactions", () => {
   });
 });
 
+describe("transactionController merchant isolation", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test("merchant transaction list is scoped to merchant user id", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    const req = {
+      user: { userId: "merchant-user", role: "merchant" },
+      ip: "127.0.0.1",
+    };
+    const res = mockResponse();
+
+    await getMerchantTransactions(req, res);
+
+    expect(mockQuery.mock.calls[0][0]).toContain("WHERE m.user_id = $1");
+    expect(mockQuery.mock.calls[0][1]).toEqual(["merchant-user"]);
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  test("admin transaction list bypasses merchant filter", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    const req = {
+      user: { userId: "admin-user", role: "admin" },
+      ip: "127.0.0.1",
+    };
+    const res = mockResponse();
+
+    await getMerchantTransactions(req, res);
+
+    expect(mockQuery.mock.calls[0][0]).not.toContain("WHERE m.user_id = $1");
+    expect(mockQuery.mock.calls[0][1]).toEqual([]);
+  });
+
+  test("customer cannot use merchant transaction route", async () => {
+    const req = {
+      user: { userId: "customer-user", role: "customer" },
+      ip: "127.0.0.1",
+    };
+    const res = mockResponse();
+
+    await getMerchantTransactions(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(mockQuery).not.toHaveBeenCalled();
+    expect(mockAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: "rbac_violation" }),
+    );
+  });
+});
+
 describe("transactionController verifyReceipt", () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
   test("returns valid true with receipt payload", async () => {
-    const payload = { txId: "tx_1", amount: 50000 };
+    const payload = {
+      transaction_id: "tx_1",
+      payer_user_id: "user_1",
+      merchant_id: "merchant_1",
+      amount: 50000,
+    };
     mockVerifyReceipt.mockReturnValueOnce(payload);
 
     const req = { body: { receipt: "header.payload.signature" } };
@@ -90,7 +147,7 @@ describe("transactionController verifyReceipt", () => {
         eventType: "receipt_verified",
         targetType: "transaction",
         targetId: "tx_1",
-        metadata: { valid: true },
+        metadata: expect.objectContaining({ valid: true, merchantId: "merchant_1" }),
       }),
     );
   });

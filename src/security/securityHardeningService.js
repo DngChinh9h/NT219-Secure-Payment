@@ -19,7 +19,9 @@ function hasSchemaEvidence(pattern) {
 function getSecurityHardeningEvidence() {
   const rateLimit = getRateLimitEvidence();
   const securityHeaders = getSecurityHeadersEvidence();
-  const replayProtectionEnabled = typeof validateNonce === "function";
+  const replayProtectionEnabled =
+    typeof validateNonce === "function" &&
+    hasSchemaEvidence(/CREATE TABLE IF NOT EXISTS request_nonces/i);
   const duplicatePaymentProtectionEnabled = hasSchemaEvidence(
     /idx_transactions_stripe_payment_id_unique/i,
   );
@@ -44,7 +46,7 @@ function getSecurityHardeningEvidence() {
       securityHeaders,
       replayProtection: {
         enabled: replayProtectionEnabled,
-        mechanism: "nonce_and_timestamp_window",
+        mechanism: "database_unique_request_nonces_with_timestamp_window",
       },
       duplicatePaymentProtection: {
         enabled: duplicatePaymentProtectionEnabled,

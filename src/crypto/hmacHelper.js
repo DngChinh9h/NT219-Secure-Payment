@@ -1,42 +1,43 @@
-'use strict';
-const crypto = require('crypto');
+"use strict";
 
-// Đọc secret từ env — không hardcode
-const HMAC_SECRET = process.env.HMAC_SECRET;
+const crypto = require("crypto");
 
-/**
- * Ký payload — trả về hex string signature
- * @param {object|string} payload
- * @returns {string} hex signature
- */
-function hmacSign(payload) {
-  if (!HMAC_SECRET) throw new Error('HMAC_SECRET not configured');
-  const data = typeof payload === 'object'
-    ? JSON.stringify(payload)
-    : String(payload);
-  return crypto
-    .createHmac('sha256', HMAC_SECRET)
-    .update(data)
-    .digest('hex');
+function getMacSecret() {
+  if (!process.env.HMAC_SECRET) {
+    throw new Error("HMAC_SECRET not configured");
+  }
+  return process.env.HMAC_SECRET;
 }
 
 /**
- * Xác minh signature — trả về boolean
- * Dùng timingSafeEqual để chống timing attack
- * @param {object|string} payload
- * @param {string} signature — hex string
- * @returns {boolean}
+ * Compute an HMAC-SHA256 message authentication code.
+ * HMAC provides integrity and authenticity for shared-secret systems; it is not
+ * a digital signature and does not provide non-repudiation.
  */
-function hmacVerify(payload, signature) {
+function computeMac(payload) {
+  const data = typeof payload === "object" ? JSON.stringify(payload) : String(payload);
+  return crypto.createHmac("sha256", getMacSecret()).update(data).digest("hex");
+}
+
+function verifyMac(payload, mac) {
   try {
-    const expected = hmacSign(payload);
-    const a = Buffer.from(expected,  'hex');
-    const b = Buffer.from(signature, 'hex');
-    if (a.length !== b.length) return false;
-    return crypto.timingSafeEqual(a, b);
+    const expected = computeMac(payload);
+    const a = Buffer.from(expected, "hex");
+    const b = Buffer.from(mac, "hex");
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
   } catch {
     return false;
   }
 }
 
-module.exports = { hmacSign, hmacVerify };
+// Backward-compatible aliases for older modules/tests. New code should use the
+// MAC terminology above.
+const hmacSign = computeMac;
+const hmacVerify = verifyMac;
+
+module.exports = {
+  computeMac,
+  verifyMac,
+  hmacSign,
+  hmacVerify,
+};

@@ -31,8 +31,16 @@ async function createPayment({ order, paymentMethodToken }) {
     id: providerPaymentId,
     orderId: order.id,
     userId: order.user_id,
+    payerUserId: order.user_id,
+    merchantId: order.merchant_id,
     amount: Number(order.total_amount),
-    currency: "vnd",
+    currency: order.currency || "vnd",
+    metadata: {
+      orderId: order.id,
+      userId: order.user_id,
+      payerUserId: order.user_id,
+      merchantId: order.merchant_id,
+    },
     status,
     token: paymentMethodToken,
   };

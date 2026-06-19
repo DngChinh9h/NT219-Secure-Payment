@@ -22,6 +22,7 @@ router.post(
   controller.createRefundRequest,
 );
 router.get("/mine", controller.getMyRefundRequests);
+router.get("/merchant", controller.getMerchantRefundRequests);
 router.post(
   "/:id/cancel",
   validateParams(refundRequestIdSchema),

@@ -12,11 +12,11 @@ jest.mock("../../db", () => ({
   query: mockQuery,
 }));
 
-const mockHmacSign = jest.fn((payload) =>
+const mockComputeMac = jest.fn((payload) =>
   `sig:${typeof payload === "string" ? payload : JSON.stringify(payload)}`,
 );
 jest.mock("../../crypto", () => ({
-  hmacSign: mockHmacSign,
+  computeMac: mockComputeMac,
 }));
 
 const auditService = require("../auditService");

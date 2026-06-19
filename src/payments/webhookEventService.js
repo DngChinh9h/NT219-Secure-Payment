@@ -60,15 +60,21 @@ async function markProcessed({ provider, providerEventId }) {
   return result.rows[0] || null;
 }
 
-async function markFailed({ provider, providerEventId, errorMessage }) {
+async function markFailed({
+  provider,
+  providerEventId,
+  errorMessage,
+  mismatchReason = null,
+}) {
   const result = await db.query(
     `UPDATE webhook_events
      SET processing_status = 'failed',
-         error_message = $3
+         error_message = $3,
+         mismatch_reason = $4
      WHERE provider = $1
        AND provider_event_id = $2
      RETURNING *`,
-    [provider, providerEventId, errorMessage],
+    [provider, providerEventId, errorMessage, mismatchReason],
   );
 
   return result.rows[0] || null;
