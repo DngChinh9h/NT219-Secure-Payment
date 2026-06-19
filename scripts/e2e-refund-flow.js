@@ -14,7 +14,8 @@ const CUSTOMER_EMAIL =
 const CUSTOMER_PASSWORD =
   process.env.E2E_CUSTOMER_PASSWORD || "Password123!";
 const TEST_STRIPE_REFUND = process.env.E2E_TEST_STRIPE_REFUND !== "false";
-const ORDER_TOTAL = 3680000;
+const ORDER_TOTAL = 125000;
+const SEEDED_PRODUCT_ID = "dd2cb336-6f7f-5bf3-9015-b2f682a8dae6";
 
 const summary = [];
 let serverTimestamp = null;
@@ -124,20 +125,11 @@ async function createOrder(customerToken, suffix) {
     body: {
       items: [
         {
-          productId: "550e8400-e29b-41d4-a716-446655440000",
-          productName: `E2E Secure Payment Starter Kit ${suffix}`,
+          productId: SEEDED_PRODUCT_ID,
           quantity: 1,
-          unitPrice: 2490000,
-        },
-        {
-          productId: "550e8400-e29b-41d4-a716-446655440001",
-          productName: `E2E Hardware Security Token ${suffix}`,
-          quantity: 1,
-          unitPrice: 1190000,
         },
       ],
       shippingAddress: "E2E Test Address",
-      totalAmount: ORDER_TOTAL,
     },
     expectedStatus: 201,
   });

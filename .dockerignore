@@ -5,6 +5,8 @@ node_modules
 coverage
 *.log
 keys
+certs
+local-secrets
 screenshots
 docs/screenshots
 infra/secrets

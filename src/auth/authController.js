@@ -1,6 +1,6 @@
 "use strict";
 const userService = require("../users/userService");
-const { signJWT } = require("../crypto/jwtHelper");
+const { getSecurityServiceClient } = require("../security/securityServiceClient");
 const auditService = require("../transactions/auditService");
 
 async function register(req, res) {
@@ -22,7 +22,7 @@ async function register(req, res) {
       cccdNumber,
     });
 
-    const token = signJWT({
+    const token = await getSecurityServiceClient().signJwt({
       userId: user.id,
       email: user.email,
       role: user.role,
@@ -66,7 +66,7 @@ async function login(req, res) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    const token = signJWT({
+    const token = await getSecurityServiceClient().signJwt({
       userId: user.id,
       email: user.email,
       role: user.role,

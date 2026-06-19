@@ -12,7 +12,8 @@ const CUSTOMER_EMAIL =
   `e2e_hardening_${Date.now()}@example.com`;
 const CUSTOMER_PASSWORD =
   process.env.E2E_CUSTOMER_PASSWORD || "Password123!";
-const ORDER_TOTAL = 50000;
+const ORDER_TOTAL = 125000;
+const SEEDED_PRODUCT_ID = "dd2cb336-6f7f-5bf3-9015-b2f682a8dae6";
 
 const summary = [];
 let currentStep = "startup";
@@ -117,14 +118,11 @@ async function createOrder(customerToken, suffix) {
     body: {
       items: [
         {
-          productId: crypto.randomUUID(),
-          productName: `Hardening E2E Item ${suffix}`,
+          productId: SEEDED_PRODUCT_ID,
           quantity: 1,
-          unitPrice: ORDER_TOTAL,
         },
       ],
       shippingAddress: "Hardening E2E Address",
-      totalAmount: ORDER_TOTAL,
     },
     expectedStatus: 201,
   });

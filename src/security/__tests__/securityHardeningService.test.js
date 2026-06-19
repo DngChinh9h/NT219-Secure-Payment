@@ -13,6 +13,7 @@ describe("securityHardeningService", () => {
       replayProtectionEnabled: true,
       duplicatePaymentProtectionEnabled: true,
       refundDoubleSpendProtectionEnabled: true,
+      securityServiceMtlsEnabled: expect.any(Boolean),
       secretScanRecommended: true,
     });
     expect(evidence.details.rateLimit.policies).toHaveProperty("auth");

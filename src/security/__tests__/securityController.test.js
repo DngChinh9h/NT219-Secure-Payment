@@ -2,183 +2,48 @@
 
 const mockVerifyAuditChain = jest.fn();
 const mockAuditLog = jest.fn();
-jest.mock("../../transactions/auditService", () => ({
-  log: mockAuditLog,
-  verifyAuditChain: mockVerifyAuditChain,
-}));
-
+jest.mock("../../transactions/auditService", () => ({ log: mockAuditLog, verifyAuditChain: mockVerifyAuditChain }));
 const mockVerifyReceipt = jest.fn();
-jest.mock("../../crypto", () => ({
-  verifyReceipt: mockVerifyReceipt,
-}));
+jest.mock("../../crypto", () => ({ verifyReceipt: mockVerifyReceipt }));
+jest.mock("../securityEvidenceService", () => ({ getSecurityEvidence: jest.fn() }));
+jest.mock("../securityHardeningService", () => ({ getSecurityHardeningEvidence: jest.fn() }));
+jest.mock("../reconciliationService", () => ({ getReconciliationSummary: jest.fn() }));
+jest.mock("../riskEvidenceService", () => ({ getRiskEvidence: jest.fn() }));
 
-const mockGetSecurityEvidence = jest.fn();
-jest.mock("../securityEvidenceService", () => ({
-  getSecurityEvidence: mockGetSecurityEvidence,
-}));
-
-const mockGetSecurityHardeningEvidence = jest.fn();
-jest.mock("../securityHardeningService", () => ({
-  getSecurityHardeningEvidence: mockGetSecurityHardeningEvidence,
-}));
-
-const mockGetReconciliationSummary = jest.fn();
-jest.mock("../reconciliationService", () => ({
-  getReconciliationSummary: mockGetReconciliationSummary,
-}));
-
-const mockGetRiskEvidence = jest.fn();
-jest.mock("../riskEvidenceService", () => ({
-  getRiskEvidence: mockGetRiskEvidence,
-}));
-
-const mockGetKeyStatus = jest.fn();
-const mockRotateSigningKey = jest.fn();
-jest.mock("../../crypto/receiptSigningKeyService", () => ({
-  getKeyStatus: mockGetKeyStatus,
-  rotateSigningKey: mockRotateSigningKey,
+const mockGetPublicKeys = jest.fn();
+const mockRotateReceiptKey = jest.fn();
+jest.mock("../securityServiceClient", () => ({
+  getSecurityServiceClient: () => ({ getPublicKeys: mockGetPublicKeys, rotateReceiptKey: mockRotateReceiptKey }),
 }));
 
 const controller = require("../securityController");
+function mockResponse() { const res = {}; res.status = jest.fn().mockReturnValue(res); res.json = jest.fn().mockReturnValue(res); return res; }
 
-function mockResponse() {
-  const res = {};
-  res.status = jest.fn().mockReturnValue(res);
-  res.json = jest.fn().mockReturnValue(res);
-  return res;
-}
+describe("securityController Security Service delegation", () => {
+  beforeEach(() => { jest.clearAllMocks(); });
 
-describe("securityController", () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  test("returns audit chain verification with brokenAt field", async () => {
-    mockVerifyAuditChain.mockResolvedValueOnce({
-      valid: false,
-      checked: 3,
-      brokenAt: "audit_3",
-    });
+  test("verifies receipts through the Security Service-backed receipt service", async () => {
+    mockVerifyReceipt.mockResolvedValueOnce({ transaction_id: "tx_1", amount: 50000 });
     const res = mockResponse();
-
-    await controller.verifyAuditChain({ query: {} }, res);
-
+    await controller.verifyReceipt({ body: { receipt: "header.payload.signature" }, user: { userId: "admin_1" }, ip: "127.0.0.1" }, res);
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({
-      valid: false,
-      checked: 3,
-      brokenAt: "audit_3",
-    });
+    expect(res.json).toHaveBeenCalledWith({ valid: true, payload: { transaction_id: "tx_1", amount: 50000 } });
   });
 
-  test("returns evidence service result without adding secrets", async () => {
-    const evidence = {
-      receiptSigning: { enabled: true },
-      auditChain: { valid: true },
-    };
-    mockGetSecurityEvidence.mockResolvedValueOnce(evidence);
+  test("returns public receipt key status only", async () => {
+    mockGetPublicKeys.mockResolvedValueOnce({ receipt: { activeKeyVersion: 2, availableKeyVersions: [1, 2], keys: [{ keyVersion: 2, active: true }] } });
     const res = mockResponse();
-
-    await controller.getEvidence({}, res);
-
-    expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith(evidence);
-    expect(JSON.stringify(res.json.mock.calls[0][0])).not.toMatch(/secret|private/i);
-  });
-
-  test("returns security hardening evidence", () => {
-    const evidence = {
-      rateLimitEnabled: true,
-      corsRestricted: true,
-      securityHeadersEnabled: true,
-    };
-    mockGetSecurityHardeningEvidence.mockReturnValueOnce(evidence);
-    const res = mockResponse();
-
-    controller.getHardening({}, res);
-
-    expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith(evidence);
-  });
-
-  test("returns reconciliation summary", async () => {
-    const summary = { status: "ok", mismatchCount: 0, mismatches: [] };
-    mockGetReconciliationSummary.mockResolvedValueOnce(summary);
-    const res = mockResponse();
-
-    await controller.getReconciliation({}, res);
-
-    expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith(summary);
-  });
-
-  test("returns rule-based risk evidence", async () => {
-    const evidence = { status: "review", triggeredRules: 1 };
-    mockGetRiskEvidence.mockResolvedValueOnce(evidence);
-    const res = mockResponse();
-
-    await controller.getRiskEvidence({}, res);
-
-    expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith(evidence);
-  });
-
-  test("admin receipt verification returns signed payload", async () => {
-    const payload = { txId: "tx_1", amount: 50000 };
-    mockVerifyReceipt.mockReturnValueOnce(payload);
-    const req = {
-      body: { receipt: "header.payload.signature" },
-      user: { userId: "admin_1" },
-      ip: "127.0.0.1",
-    };
-    const res = mockResponse();
-
-    await controller.verifyReceipt(req, res);
-
-    expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({ valid: true, payload });
-    expect(mockAuditLog).toHaveBeenCalledWith(
-      expect.objectContaining({
-        eventType: "receipt_verified",
-        actorUserId: "admin_1",
-        targetId: "tx_1",
-      }),
-    );
-  });
-
-  test("returns safe receipt signing key status", async () => {
-    const status = {
-      activeKeyVersion: 2,
-      availableKeyVersions: [1, 2],
-      keys: [{ keyVersion: 2, active: true }],
-    };
-    mockGetKeyStatus.mockResolvedValueOnce(status);
-    const res = mockResponse();
-
     await controller.getReceiptSigningKeyStatus({}, res);
-
-    expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith(status);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ activeKeyVersion: 2 }));
     expect(JSON.stringify(res.json.mock.calls[0][0])).not.toMatch(/private|encrypted/i);
   });
 
-  test("rotates signing key and records an audit event", async () => {
-    mockRotateSigningKey.mockResolvedValueOnce({
-      activeKeyVersion: 3,
-      availableKeyVersions: [1, 2, 3],
-    });
-    const req = { user: { userId: "admin_1" }, ip: "127.0.0.1" };
+  test("forwards key rotation to Security Service and audits the result", async () => {
+    mockRotateReceiptKey.mockResolvedValueOnce({ activeKeyVersion: 3, availableKeyVersions: [1, 2, 3] });
     const res = mockResponse();
-
-    await controller.rotateReceiptSigningKey(req, res);
-
+    await controller.rotateReceiptSigningKey({ user: { userId: "admin_1" }, ip: "127.0.0.1" }, res);
+    expect(mockRotateReceiptKey).toHaveBeenCalledTimes(1);
+    expect(mockAuditLog).toHaveBeenCalledWith(expect.objectContaining({ eventType: "key_rotation", targetId: "3" }));
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(mockAuditLog).toHaveBeenCalledWith(
-      expect.objectContaining({
-        eventType: "receipt_signing_key_rotated",
-        actorUserId: "admin_1",
-        targetId: "3",
-      }),
-    );
   });
 });

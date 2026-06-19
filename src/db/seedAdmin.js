@@ -54,10 +54,7 @@ function redactSecrets(value, env = process.env) {
     env.DATABASE_URL,
     env.STRIPE_SECRET_KEY,
     env.STRIPE_WEBHOOK_SECRET,
-    env.JWT_PRIVATE_KEY,
-    env.JWT_PUBLIC_KEY,
     env.HMAC_SECRET,
-    env.KMS_MASTER_KEY,
   ].filter(Boolean);
 
   for (const secret of secrets) {
@@ -151,7 +148,7 @@ async function insertAdmin({ database, columns, email, passwordHash, pii }) {
     return result.rows[0];
   }
 
-  const encryptedPII = encryptUserPII(pii);
+  const encryptedPII = await encryptUserPII(pii);
   const result = await database.query(
     `INSERT INTO users (
        email, password_hash, role,

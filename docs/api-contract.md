@@ -8,13 +8,13 @@ All authenticated endpoints use `Authorization: Bearer <jwt>`.
 Role: public customer registration.
 Body: `email`, `password`, `fullName`, `address`, `cccdNumber`.
 Response: JWT and safe user fields.
-Security: password hashing, PII envelope encryption, audit `user_register`.
+Security: password hashing, PII AES-256-GCM with a transient data key wrapped by the mandatory Security Service over mTLS, audit `user_register`.
 
 ### `POST /api/auth/login`
 Role: public.
 Body: `email`, `password`.
 Response: JWT with `userId`, `email`, `role`.
-Security: bcrypt verify, JWT, audit `user_login`.
+Security: bcrypt verify; backend sends safe claims to the mandatory Security Service over mTLS for ES512 JWT issuance and keeps only the JWT public key, audit `user_login`.
 
 ## Orders
 
@@ -79,7 +79,7 @@ Security: payer/merchant/admin access policy.
 Role: public.
 Body: `receipt`.
 Response: `{ valid, payload }`.
-Security: ES512 JWS verification using public key by `key_version`.
+Security: backend delegates ES512 JWS verification to the mandatory Security Service over mTLS; the service selects a public key by `key_version` and detects receipt tampering.
 
 ## Refund Requests
 
@@ -126,10 +126,25 @@ Security: same verifier through transaction route.
 ### `POST /api/admin/security/keys/rotate`
 Role: `admin`.
 Response: receipt key status.
-Security: creates new ES512 key, stores public key versions, wraps private key with KMS AES-256-GCM, audit `key_rotation`.
+Security: backend forwards this request over mTLS to Security Service. Only Security Service creates and stores the new ES512 P-521 private key; old public-key versions remain available for receipt verification and backend audits `key_rotation`.
 
 ### `POST /api/admin/security/receipt/verify`
 Role: `admin`.
 Body: `receipt`.
 Response: `{ valid, payload }`.
-Security: ES512 JWS verification and audit.
+Security: ES512 JWS verification through Security Service and audit. This endpoint never exposes private key material.
+
+## Internal Security Service
+
+These endpoints are not public API endpoints. They are reachable only from the private backend network on HTTPS `9443` with a backend client certificate signed by the internal CA. Security Service rejects missing or untrusted client certificates.
+
+| Method/path | Purpose |
+| --- | --- |
+| `GET /internal/health` | mTLS health proof. |
+| `GET /internal/keys/public` | JWT and receipt public-key metadata only. |
+| `POST /internal/sign-jwt` | Signs backend-built `{ userId, email, role }` as ES512 JWT. |
+| `POST /internal/sign-receipt` | Signs a canonical payment receipt as ES512 JWS. |
+| `POST /internal/verify-receipt` | Verifies JWS with public key selected by version. |
+| `POST /internal/wrap-key` | Wraps a 32-byte data key with AES-256-GCM. |
+| `POST /internal/unwrap-key` | Authenticates and unwraps an AES-256-GCM envelope. |
+| `POST /internal/rotate-receipt-key` | Creates and activates a new ES512 receipt key version. |

@@ -1,0 +1,17 @@
+{
+  "name": "nt219-security-service",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Internal mTLS signer and envelope-key service for NT219 Secure Payment",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "jest --runInBand"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3"
+  }
+}

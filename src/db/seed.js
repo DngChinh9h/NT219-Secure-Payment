@@ -36,7 +36,7 @@ async function upsertUser(user) {
   const passwordHash = await hashPassword(
     user.role === "admin" ? process.env.ADMIN_PASSWORD || DEV_PASSWORD : DEV_PASSWORD,
   );
-  const pii = encryptUserPII(user);
+  const pii = await encryptUserPII(user);
   const result = await db.query(
     `INSERT INTO users (
        email, password_hash, role,

@@ -255,14 +255,18 @@ ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS chain_version VARCHAR(50);
 CREATE TABLE IF NOT EXISTS receipt_signing_keys (
   key_version INTEGER PRIMARY KEY,
   public_key TEXT NOT NULL,
-  encrypted_private_key TEXT NOT NULL,
-  private_key_iv VARCHAR(50) NOT NULL,
-  private_key_auth_tag VARCHAR(50) NOT NULL,
-  wrapped_data_key TEXT NOT NULL,
   active BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   rotated_at TIMESTAMPTZ
 );
+
+-- Private receipt keys are now filesystem material owned only by Security Service.
+-- Existing encrypted private-key columns are intentionally removed during this hardening migration.
+ALTER TABLE receipt_signing_keys DROP COLUMN IF EXISTS encrypted_private_key;
+ALTER TABLE receipt_signing_keys DROP COLUMN IF EXISTS private_key_iv;
+ALTER TABLE receipt_signing_keys DROP COLUMN IF EXISTS private_key_auth_tag;
+ALTER TABLE receipt_signing_keys DROP COLUMN IF EXISTS wrapped_data_key;
+REVOKE ALL ON receipt_signing_keys FROM PUBLIC;
 
 CREATE INDEX IF NOT EXISTS idx_merchants_user_id ON merchants(user_id);
 CREATE INDEX IF NOT EXISTS idx_products_merchant_id ON products(merchant_id);

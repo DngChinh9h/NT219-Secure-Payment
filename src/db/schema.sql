@@ -236,10 +236,6 @@ CREATE TABLE audit_logs (
 CREATE TABLE receipt_signing_keys (
   key_version INTEGER PRIMARY KEY,
   public_key TEXT NOT NULL,
-  encrypted_private_key TEXT NOT NULL,
-  private_key_iv VARCHAR(50) NOT NULL,
-  private_key_auth_tag VARCHAR(50) NOT NULL,
-  wrapped_data_key TEXT NOT NULL,
   active BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   rotated_at TIMESTAMPTZ

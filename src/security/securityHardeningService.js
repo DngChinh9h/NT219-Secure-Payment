@@ -6,6 +6,7 @@ const { getAllowedOrigins, isCorsRestricted } = require("../config/corsConfig");
 const { validateNonce } = require("../crypto/nonceValidator");
 const { getRateLimitEvidence } = require("../gateway/rateLimiter");
 const { getSecurityHeadersEvidence } = require("../gateway/securityHeaders");
+const { getSecurityClientConfigStatus } = require("./securityServiceClient");
 
 const schema = fs.readFileSync(
   path.join(__dirname, "../db/schema.deploy.sql"),
@@ -28,6 +29,7 @@ function getSecurityHardeningEvidence() {
   const refundDoubleSpendProtectionEnabled = hasSchemaEvidence(
     /idx_refund_requests_active_order_unique/i,
   );
+  const securityServiceMtls = getSecurityClientConfigStatus({ checkFiles: false });
 
   return {
     rateLimitEnabled: rateLimit.enabled,
@@ -36,6 +38,7 @@ function getSecurityHardeningEvidence() {
     replayProtectionEnabled,
     duplicatePaymentProtectionEnabled,
     refundDoubleSpendProtectionEnabled,
+    securityServiceMtlsEnabled: securityServiceMtls.valid,
     secretScanRecommended: true,
     details: {
       rateLimit,
@@ -55,6 +58,11 @@ function getSecurityHardeningEvidence() {
       refundDoubleSpendProtection: {
         enabled: refundDoubleSpendProtectionEnabled,
         mechanism: "active_refund_unique_index_and_transaction_status_guard",
+      },
+      securityService: {
+        enabled: securityServiceMtls.valid,
+        checks: securityServiceMtls.checks,
+        mechanism: "mandatory_https_mutual_tls",
       },
     },
   };

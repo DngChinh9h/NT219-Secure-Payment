@@ -28,7 +28,7 @@
       const passwordHash = await hashPassword(password);
 
       // Mã hóa PII nếu có (bắt buộc trong registerSchema)
-      const pii = encryptUserPII({ fullName, address, cccdNumber });
+      const pii = await encryptUserPII({ fullName, address, cccdNumber });
 
       const result = await db.query(
         `INSERT INTO users (

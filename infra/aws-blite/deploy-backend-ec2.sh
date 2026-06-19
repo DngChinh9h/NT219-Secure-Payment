@@ -3,7 +3,7 @@ set -euo pipefail
 
 APP_DIR="/opt/nt219/NT219-Secure-Payment"
 ENV_FILE="/opt/nt219/backend.env"
-KEY_DIR="/opt/nt219/keys"
+MATERIAL_DIR="/opt/nt219/security-material"
 IMAGE_NAME="nt219-backend:latest"
 CONTAINER_NAME="nt219-backend"
 
@@ -20,7 +20,9 @@ docker run -d \
   --name "$CONTAINER_NAME" \
   --restart unless-stopped \
   --env-file "$ENV_FILE" \
-  -v "$KEY_DIR:/opt/nt219/keys:ro" \
+  -v "$MATERIAL_DIR/certs/ca:/run/certs/ca:ro" \
+  -v "$MATERIAL_DIR/certs/backend:/run/certs/backend:ro" \
+  -v "$MATERIAL_DIR/keys/public:/run/public:ro" \
   -p 3000:3000 \
   "$IMAGE_NAME"
 
@@ -37,4 +39,5 @@ If database migrations are needed, run them separately after reviewing the targe
   docker exec nt219-backend npm run migrate:deploy
 
 Do not place production secrets in this script.
+The private Security Service must already be reachable at SECURITY_SERVICE_BASE_URL:9443.
 NOTE

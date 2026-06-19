@@ -7,7 +7,7 @@ module.exports = {
   // AES-256-GCM data encryption helpers.
   ...require("./aesHelper"),
 
-  // JWT helpers.
+  // JWT verification uses the Security Service public key only.
   ...require("./jwtHelper"),
 
   // Stateless timestamp helper; replay state is persisted in request_nonces.
@@ -16,6 +16,6 @@ module.exports = {
   // Input validation.
   ...require("./inputValidator"),
 
-  // ES512 JWS receipt signing and verification.
+  // ES512 receipt signing and verification delegate to Security Service over mTLS.
   ...require("./receiptService"),
 };

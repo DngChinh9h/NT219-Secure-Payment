@@ -2,7 +2,7 @@
 
 const auditService = require("../transactions/auditService");
 const { verifyReceipt: verifySignedReceipt } = require("../crypto");
-const signingKeyService = require("../crypto/receiptSigningKeyService");
+const { getSecurityServiceClient } = require("./securityServiceClient");
 const securityEvidenceService = require("./securityEvidenceService");
 const securityHardeningService = require("./securityHardeningService");
 const reconciliationService = require("./reconciliationService");
@@ -95,8 +95,8 @@ async function verifyReceipt(req, res) {
 
 async function getReceiptSigningKeyStatus(req, res) {
   try {
-    const status = await signingKeyService.getKeyStatus();
-    return res.status(200).json(status);
+    const keys = await getSecurityServiceClient().getPublicKeys();
+    return res.status(200).json(keys.receipt);
   } catch {
     return res.status(500).json({ error: "Failed to get receipt signing key status" });
   }
@@ -104,7 +104,7 @@ async function getReceiptSigningKeyStatus(req, res) {
 
 async function rotateReceiptSigningKey(req, res) {
   try {
-    const status = await signingKeyService.rotateSigningKey();
+    const status = await getSecurityServiceClient().rotateReceiptKey();
     await auditService.log({
       eventType: "receipt_signing_key_rotated",
       actorUserId: req.user.userId,

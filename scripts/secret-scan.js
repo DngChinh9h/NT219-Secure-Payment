@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 
 const root = path.resolve(__dirname, "..");
-const skipDirs = new Set([".git", "node_modules", "coverage"]);
+const skipDirs = new Set([".git", "node_modules", "coverage", "keys", "certs", "local-secrets", "runtime-output"]);
 const forbiddenExtensions = new Set([".key", ".pem", ".p12", ".pfx"]);
 const findings = [];
 

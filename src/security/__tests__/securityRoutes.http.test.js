@@ -24,17 +24,20 @@ jest.mock("../../crypto/receiptService", () => ({
   })),
 }));
 
-jest.mock("../../crypto/receiptSigningKeyService", () => ({
-  getKeyStatus: jest.fn(async () => ({
-    activeKeyVersion: 1,
-    availableKeyVersions: [1],
-    keys: [],
-  })),
-  rotateSigningKey: jest.fn(async () => ({
-    activeKeyVersion: 2,
-    availableKeyVersions: [1, 2],
-    keys: [{ keyVersion: 2, active: true }],
-  })),
+jest.mock("../securityServiceClient", () => ({
+  getSecurityClientConfigStatus: () => ({
+    valid: true,
+    checks: {
+      securityServiceHttps: true,
+      clientCertificateConfigured: true,
+      clientPrivateKeyConfigured: true,
+      internalCaConfigured: true,
+    },
+  }),
+  getSecurityServiceClient: () => ({
+    getPublicKeys: jest.fn(async () => ({ receipt: { activeKeyVersion: 1, availableKeyVersions: [1], keys: [] } })),
+    rotateReceiptKey: jest.fn(async () => ({ activeKeyVersion: 2, availableKeyVersions: [1, 2], keys: [{ keyVersion: 2, active: true }] })),
+  }),
 }));
 
 jest.mock("../reconciliationService", () => ({
